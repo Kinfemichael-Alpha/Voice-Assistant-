@@ -15,10 +15,13 @@ captures/
 *.aab
 *.ap_
 
-# Keys: never commit signing material
+# Keys: never commit private signing material.
+# The one exception is keystore/ignis-debug.p12, the fixed key every Ignis build is signed with
+# so updates install over the old version.
 *.jks
 *.keystore
 keystore.properties
+!keystore/ignis-debug.p12
 
 # Python (training/)
 __pycache__/

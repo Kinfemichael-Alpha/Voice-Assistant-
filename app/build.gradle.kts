@@ -13,13 +13,27 @@ android {
         applicationId = "com.dimts.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "0.2.0"
+    }
+
+    signingConfigs {
+        create("ignis") {
+            storeFile = file("../keystore/ignis-debug.p12")
+            storeType = "pkcs12"
+            storePassword = "ignis-debug"
+            keyAlias = "ignis"
+            keyPassword = "ignis-debug"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("ignis")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("ignis")
         }
     }
 

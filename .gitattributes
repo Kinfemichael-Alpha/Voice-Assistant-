@@ -6,3 +6,4 @@
 gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+*.p12 binary

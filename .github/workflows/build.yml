@@ -25,6 +25,12 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --no-daemon
 
+      - name: Show signing certificate
+        continue-on-error: true
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/*.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: dimts-debug-apk
