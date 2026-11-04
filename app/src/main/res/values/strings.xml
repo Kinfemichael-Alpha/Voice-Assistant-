@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Dimts</string>
+    <string name="app_name">Ignis</string>
     <string name="accessibility_label">Dimts screen control</string>
     <string name="accessibility_description">Lets Dimts press Back and Home, scroll, swipe, tap and type for the commands you give it. It only acts when you (or a rule you wrote) run a command.</string>
     <string name="input_hint">type a command  (help)</string>
