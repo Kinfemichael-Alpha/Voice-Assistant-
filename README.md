@@ -342,7 +342,8 @@ when power.connected:
 | *Restricted setting - this setting is unavailable* when switching on accessibility | Android blocks this for apps installed outside the Play Store. Settings > Apps > Ignis > **⋮** (top right) > **Allow restricted settings**, confirm, then switch the service on again. |
 | `tap`, `scroll`, `back` say the accessibility service is off | `grant accessibility`, then in Settings > Accessibility > Installed apps (or Installed services) switch **Ignis screen control** on and tap Allow. |
 | `brightness` / `rotate` refuse | `grant write_settings`. |
-| `dnd` / `ringer silent` refuse | `grant dnd`. |
+| `dnd` / `ringer silent` refuse | `grant dnd`, then switch **Ignis** on in the Do Not Disturb access list (builds before 0.2.1 were missing from that list: install the latest build). |
+| `grant all` opens the same page again | It now opens each settings page once, then lists what is still off. Use `grant <name>` to open one again. |
 | Rules stop reacting after a while | `grant battery` and choose *unrestricted*; open the app once after a reboot (Android 14+). |
 | `open` does nothing while the screen is off | `grant overlay`. |
 | Key sound is not recognised | Re-record in the place you use it, use `test key`, raise `sensitivity`. |

@@ -36,6 +36,7 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- Lets 'open <app name>' list launcher apps without the broad QUERY_ALL_PACKAGES permission -->

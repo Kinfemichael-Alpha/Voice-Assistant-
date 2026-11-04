@@ -607,6 +607,8 @@ class AppRuntime(val app: Application) {
         return CommandResult.ok("the writer unloads after $n s without a command")
     }
 
+    private val offeredPages = HashSet<String>()
+
     fun grant(arg: String?): CommandResult {
         val bridge = ui ?: return CommandResult.error("open the Dimts screen to grant permissions")
         val which = arg?.lowercase()
@@ -616,9 +618,17 @@ class AppRuntime(val app: Application) {
                 bridge.requestPopupPermissions(popups)
                 return CommandResult.ok("Android will now ask for: ${popups.joinToString { it.substringAfterLast('.').lowercase() }}")
             }
-            val next = perms.items.filter { it.kind == Permissions.Kind.SETTINGS_PAGE && !it.granted() }
-                .sortedByDescending { it.required }.firstOrNull()
-                ?: return CommandResult.ok("everything is granted")
+            val missing = perms.items.filter { it.kind == Permissions.Kind.SETTINGS_PAGE && !it.granted() }
+            if (missing.isEmpty()) return CommandResult.ok("everything is granted")
+            val next = missing.filter { it.id !in offeredPages }.sortedByDescending { it.required }.firstOrNull()
+            if (next == null) {
+                offeredPages.clear()
+                return CommandResult.ok(
+                    "every page was opened once and these are still off: ${missing.joinToString { it.id }}\n" +
+                        "switch them on yourself, or open one again with:  grant <name>   (see: permissions)",
+                )
+            }
+            offeredPages.add(next.id)
             bridge.openSettingsPage(next.settingsIntent!!())
             return CommandResult.ok("opening '${next.title}' - switch it on, come back, then type:  grant all")
         }
