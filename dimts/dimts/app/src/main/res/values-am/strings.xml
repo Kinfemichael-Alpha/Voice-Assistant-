@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ድምጽ</string>
+    <string name="accessibility_label">ድምጽ - ስክሪን መቆጣጠሪያ</string>
+    <string name="accessibility_description">በሰጡት ትዕዛዝ መሠረት ወደ ኋላ፣ ወደ ቤት፣ ማሸብለል፣ መጎተት፣ መንካትና መጻፍ ያስችላል። የሚሠራው እርስዎ (ወይም የጻፉት ደንብ) ትዕዛዝ ሲሰጡ ብቻ ነው።</string>
+    <string name="input_hint">ትዕዛዝ ይጻፉ  (help)</string>
+    <string name="notif_channel">የድምጽ የጀርባ አገልግሎት</string>
+    <string name="notif_title">ድምጽ</string>
+    <string name="notif_listening">የቁልፍ ድምጽዎን እያዳመጠ ነው</string>
+    <string name="notif_assistant">የድምጽ ረዳት ንቁ ነው</string>
+    <string name="notif_rules">የሚጠብቁ ደንቦች እየሠሩ ናቸው</string>
+    <string name="notif_stop">አቁም</string>
+    <string name="notif_channel_messages">ከደንቦች የሚመጡ መልእክቶች</string>
+    <string name="notif_channel_listen">የድምጽ ቁልፍ አዳማጭ</string>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- five sound-wave bars inside the 66dp safe zone -->
+    <path android:fillColor="#00E676" android:pathData="M30,46h6v16h-6z" />
+    <path android:fillColor="#00E676" android:pathData="M40,38h6v32h-6z" />
+    <path android:fillColor="#00E676" android:pathData="M51,30h6v48h-6z" />
+    <path android:fillColor="#00E676" android:pathData="M62,38h6v32h-6z" />
+    <path android:fillColor="#00E676" android:pathData="M72,46h6v16h-6z" />
+</vector>
