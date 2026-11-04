@@ -43,7 +43,7 @@ Android only installs an update over an app when both were signed with the **sam
 | notifications | the "listening" notice, `notify` |
 | phone, contacts | `call`, `answer`, `hangup`, names like "mom", `call.*` events |
 | sms (optional) | `sms` |
-| accessibility | `tap`, `scroll`, `swipe`, `back`, `home`, `lock`, `screenshot`, `read screen` |
+| accessibility | `tap`, `scroll`, `swipe`, `back`, `home`, `lock`, `screenshot`, `read screen` (on Samsung: Settings > Accessibility > Installed apps > **Ignis screen control**; if it says *Restricted setting*, see [Troubleshooting](#10-troubleshooting)) |
 | alarms | rules fire on the exact minute even while the phone sleeps |
 | battery (optional) | keeps the key listener alive in the background (choose "unrestricted") |
 | overlay (optional) | lets rules open apps while the screen is off or another app is on top |
@@ -339,7 +339,8 @@ when power.connected:
 | Problem | Fix |
 |---|---|
 | *App not installed as package conflicts with an existing package* | Uninstall the old Ignis once (see [Install](#1-install)); later updates install over it. |
-| `tap`, `scroll`, `back` say the accessibility service is off | `grant accessibility`, switch **Ignis** on in the Android page that opens. |
+| *Restricted setting - this setting is unavailable* when switching on accessibility | Android blocks this for apps installed outside the Play Store. Settings > Apps > Ignis > **⋮** (top right) > **Allow restricted settings**, confirm, then switch the service on again. |
+| `tap`, `scroll`, `back` say the accessibility service is off | `grant accessibility`, then in Settings > Accessibility > Installed apps (or Installed services) switch **Ignis screen control** on and tap Allow. |
 | `brightness` / `rotate` refuse | `grant write_settings`. |
 | `dnd` / `ringer silent` refuse | `grant dnd`. |
 | Rules stop reacting after a while | `grant battery` and choose *unrestricted*; open the app once after a reboot (Android 14+). |
