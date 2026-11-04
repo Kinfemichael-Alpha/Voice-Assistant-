@@ -17,7 +17,46 @@ object Fuzzy {
         return prev[b.length]
     }
 
-    /** Closest candidate within a small edit distance (scaled to the word length), or null. */
+    fun soundKey(text: String): String {
+        var s = text.lowercase().filter { it.isLetterOrDigit() }
+        if (s.length > 3 && s.endsWith("e")) s = s.dropLast(1)
+        s = s.replace("ph", "f").replace("ck", "k").replace("x", "ks")
+            .replace('c', 'k').replace('q', 'k').replace('z', 's')
+        val sb = StringBuilder()
+        var lastVowel = false
+        for (ch in s) {
+            val vowel = ch in "aeiouy"
+            if (vowel) {
+                if (!lastVowel) sb.append('a')
+            } else if (sb.isEmpty() || sb.last() != ch) {
+                sb.append(ch)
+            }
+            lastVowel = vowel
+        }
+        return sb.toString()
+    }
+
+    fun rank(query: String, candidates: Collection<String>, limit: Int = 5): List<String> {
+        val q = query.lowercase().trim()
+        if (q.isEmpty()) return emptyList()
+        val qKey = soundKey(q)
+        val scored = candidates.distinct().mapNotNull { c ->
+            val l = c.lowercase()
+            val gap = Math.abs(l.length - q.length)
+            val d = minOf(distance(q, l), distance(qKey, soundKey(l)))
+            val tolerance = maxOf(2, maxOf(q.length, l.length) / 3)
+            val score = when {
+                l == q -> 0
+                l.startsWith(q) || q.startsWith(l) -> 10 + gap
+                l.contains(q) || q.contains(l) -> 40 + gap
+                d <= tolerance -> 100 + d * 10 + gap
+                else -> return@mapNotNull null
+            }
+            Triple(c, score, l.length)
+        }
+        return scored.sortedWith(compareBy({ it.second }, { it.third })).take(limit).map { it.first }
+    }
+
     fun closest(word: String, candidates: Collection<String>): String? {
         val w = word.lowercase()
         val limit = when {

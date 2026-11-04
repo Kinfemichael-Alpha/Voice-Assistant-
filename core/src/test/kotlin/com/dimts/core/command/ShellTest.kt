@@ -118,10 +118,16 @@ class ShellTest {
                 is com.dimts.core.script.IfStmt -> s.branches.flatMap { names(it.body) } + (s.elseBody?.let { names(it) } ?: emptyList())
                 is com.dimts.core.script.RuleStmt -> names(s.body)
                 is com.dimts.core.script.RepeatStmt -> names(s.body)
+                is com.dimts.core.script.WhileStmt -> names(s.body)
+                is com.dimts.core.script.DefStmt -> names(s.body)
                 else -> emptyList()
             }
         }
-        for (words in names(program.stmts)) assertNotNull("example uses unknown command $words", Commands.registry.resolve(words))
+        val defined = program.stmts.filterIsInstance<com.dimts.core.script.DefStmt>().map { it.name.lowercase() }.toSet()
+        for (words in names(program.stmts)) {
+            if (words.firstOrNull()?.lowercase() in defined) continue
+            assertNotNull("example uses unknown command $words", Commands.registry.resolve(words))
+        }
     }
 
     // ---- the shell around the engine ---------------------------------------------------------

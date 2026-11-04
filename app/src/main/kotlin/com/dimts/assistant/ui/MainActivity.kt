@@ -64,7 +64,7 @@ class MainActivity : Activity(), UiBridge {
         rt.logBus.listener = { line -> append(line) }
         for (l in rt.logBus.snapshot()) append(l)
         if (rt.logBus.snapshot().isEmpty()) {
-            rt.log(Level.OK, "DIMTS console. Type  help  for all commands,  permissions  to see what is allowed.")
+            rt.log(Level.OK, "Ignis console. Type  help  for all commands,  permissions  to see what is allowed.")
             if (!rt.settings.firstRunDone) {
                 rt.settings.firstRunDone = true
                 rt.log(Level.INFO, "First time: type  grant all  and follow Android's questions.")

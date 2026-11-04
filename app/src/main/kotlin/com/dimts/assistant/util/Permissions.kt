@@ -53,6 +53,10 @@ class Permissions(private val ctx: Context) {
 
     fun canDrawOverlays() = Settings.canDrawOverlays(ctx)
 
+    fun canWriteSettings() = Settings.System.canWrite(ctx)
+
+    fun hasDndAccess() = (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).isNotificationPolicyAccessGranted
+
     val items: List<Item> = listOf(
         Item("microphone", "Microphone", "hear your key sound and commands", Kind.POPUP, true,
             listOf(Manifest.permission.RECORD_AUDIO), { hasMicrophone() }),
@@ -79,9 +83,15 @@ class Permissions(private val ctx: Context) {
         Item("overlay", "Display over other apps", "let rules open apps while the screen is off or another app is on top", Kind.SETTINGS_PAGE, false,
             granted = { canDrawOverlays() },
             settingsIntent = { Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")) }),
-        Item("dnd", "Do Not Disturb access", "needed only for 'ringer silent'", Kind.SETTINGS_PAGE, false,
+        Item("dnd", "Do Not Disturb access", "needed for 'ringer silent' and 'dnd'", Kind.SETTINGS_PAGE, false,
             granted = { (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).isNotificationPolicyAccessGranted },
             settingsIntent = { Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS) }),
+        Item("write_settings", "Modify system settings", "needed for 'brightness' and 'rotate'", Kind.SETTINGS_PAGE, false,
+            granted = { canWriteSettings() },
+            settingsIntent = { Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}")) }),
+        Item("bluetooth", "Nearby devices", "lets the state bluetooth.on be read", Kind.POPUP, false,
+            if (Build.VERSION.SDK_INT >= 31) listOf(Manifest.permission.BLUETOOTH_CONNECT) else emptyList(),
+            { Build.VERSION.SDK_INT < 31 || has(Manifest.permission.BLUETOOTH_CONNECT) }),
     )
 
     fun report(): String = items.joinToString("\n") { i ->

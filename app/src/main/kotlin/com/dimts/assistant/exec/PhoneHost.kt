@@ -4,6 +4,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
@@ -12,6 +14,14 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.app.NotificationManager.INTERRUPTION_FILTER_ALARMS
+import android.app.NotificationManager.INTERRUPTION_FILTER_ALL
+import android.app.NotificationManager.INTERRUPTION_FILTER_NONE
+import android.app.NotificationManager.INTERRUPTION_FILTER_PRIORITY
+import android.provider.AlarmClock
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.telecom.TelecomManager
@@ -29,9 +39,15 @@ import com.dimts.core.script.Origin
 /** Everything the console can make the phone do. One `when` branch per command id in the registry. */
 class PhoneHost(private val rt: AppRuntime) : DeviceHost {
     private val ctx: Context get() = rt.app
-    private var torchOn = false
+    private var torchOn: Boolean
+        get() = rt.env.torchOn
+        set(value) { rt.env.torchOn = value }
+    private var pending: List<Pair<String, String>> = emptyList()
+
+    @Volatile private var fromVoice = false
 
     override fun perform(spec: CommandSpec, args: List<String>, origin: Origin): CommandResult = try {
+        fromVoice = origin == Origin.VOICE
         run(spec.id, args)
     } catch (e: SecurityException) {
         CommandResult.error("Android refused this (${e.message?.take(80)}). Type 'permissions' to see what is missing.")
@@ -72,6 +88,16 @@ class PhoneHost(private val rt: AppRuntime) : DeviceHost {
         "contact" -> contact(a.joinToString(" ").trim())
         "flashlight" -> flashlight(a.firstOrNull())
         "settings" -> settingsPage(a.firstOrNull())
+        "pick" -> pick(a.firstOrNull())
+        "alarm.set" -> setAlarm(a)
+        "timer.set" -> setTimer(a)
+        "copy" -> copyText(a.joinToString(" "))
+        "share" -> shareText(a.joinToString(" "))
+        "map" -> showMap(a.joinToString(" ").trim())
+        "brightness" -> brightness(a.firstOrNull())
+        "rotate" -> rotate(a.firstOrNull())
+        "dnd" -> dnd(a.firstOrNull())
+        "vibrate" -> vibrate(a.firstOrNull()?.toLongOrNull() ?: 400L)
 
         // ---- screen ----
         "back" -> global("Back") { it.back() }
@@ -93,7 +119,7 @@ class PhoneHost(private val rt: AppRuntime) : DeviceHost {
         }
 
         // ---- sound ----
-        "volume" -> volume(a.firstOrNull())
+        "volume" -> volume(a)
         "media.play" -> media(KeyEvent.KEYCODE_MEDIA_PLAY)
         "media.pause" -> media(KeyEvent.KEYCODE_MEDIA_PAUSE)
         "media.next" -> media(KeyEvent.KEYCODE_MEDIA_NEXT)
@@ -208,16 +234,37 @@ class PhoneHost(private val rt: AppRuntime) : DeviceHost {
         val pm = ctx.packageManager
         val apps = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
             .map { it.loadLabel(pm).toString() to it.activityInfo.packageName }
-        val pick = apps.firstOrNull { it.first.equals(query, true) }
-            ?: apps.firstOrNull { it.first.startsWith(query, true) }
-            ?: apps.firstOrNull { it.first.contains(query, true) }
-        if (pick == null) {
-            val hint = Fuzzy.closest(query, apps.map { it.first })
-            return err("no app named '$query'" + (hint?.let { " - did you mean '$it'?" } ?: ""))
+        val exact = apps.filter { it.first.equals(query, true) }
+        if (exact.size == 1) {
+            pending = emptyList()
+            return launchApp(exact[0])
         }
-        val intent = pm.getLaunchIntentForPackage(pick.second) ?: return err("'${pick.first}' cannot be opened")
+        val labels = Fuzzy.rank(query, apps.map { it.first }, 5)
+        val options = labels.mapNotNull { label -> apps.firstOrNull { it.first == label } }
+        if (options.isEmpty()) {
+            pending = emptyList()
+            return err("no app is named or sounds like '$query'")
+        }
+        pending = options
+        val list = options.mapIndexed { i, o -> "  ${i + 1}. ${o.first}" }.joinToString("\n")
+        val spoken = options.mapIndexed { i, o -> "${i + 1} ${o.first}" }.joinToString(", ")
+        if (fromVoice) rt.speaker.speak("Did you mean $spoken? Say pick and a number.")
+        return ok("no app is called exactly '$query'. Did you mean:\n$list\nChoose with:  pick <number>")
+    }
+
+    private fun launchApp(app: Pair<String, String>): CommandResult {
+        val intent = ctx.packageManager.getLaunchIntentForPackage(app.second) ?: return err("'${app.first}' cannot be opened")
         launch(intent)
-        return ok("opening ${pick.first}" + backgroundNote())
+        return ok("opening ${app.first}" + backgroundNote())
+    }
+
+    private fun pick(arg: String?): CommandResult {
+        if (pending.isEmpty()) return err("nothing to choose from - there are no options right now")
+        val n = arg?.toIntOrNull() ?: 1
+        if (n < 1 || n > pending.size) return err("choose a number from 1 to ${pending.size}")
+        val chosen = pending[n - 1]
+        pending = emptyList()
+        return launchApp(chosen)
     }
 
     private fun search(query: String): CommandResult {
@@ -249,7 +296,22 @@ class PhoneHost(private val rt: AppRuntime) : DeviceHost {
             "location" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
             "accessibility" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
             "airplane" -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
-            else -> return err("unknown settings page '$page' (try: wifi, bluetooth, display, sound, battery, apps, location, accessibility, airplane)")
+            "nfc" -> Settings.ACTION_NFC_SETTINGS
+            "date" -> Settings.ACTION_DATE_SETTINGS
+            "language" -> Settings.ACTION_LOCALE_SETTINGS
+            "storage" -> Settings.ACTION_INTERNAL_STORAGE_SETTINGS
+            "privacy" -> Settings.ACTION_PRIVACY_SETTINGS
+            "security" -> Settings.ACTION_SECURITY_SETTINGS
+            "vpn" -> Settings.ACTION_VPN_SETTINGS
+            "roaming" -> Settings.ACTION_DATA_ROAMING_SETTINGS
+            "cast" -> Settings.ACTION_CAST_SETTINGS
+            "night" -> Settings.ACTION_NIGHT_DISPLAY_SETTINGS
+            "wireless" -> Settings.ACTION_WIRELESS_SETTINGS
+            "sync" -> Settings.ACTION_SYNC_SETTINGS
+            "info" -> Settings.ACTION_DEVICE_INFO_SETTINGS
+            "input" -> Settings.ACTION_INPUT_METHOD_SETTINGS
+            "usage" -> Settings.ACTION_USAGE_ACCESS_SETTINGS
+            else -> return err("unknown settings page '$page' (type: help settings)")
         }
         launch(Intent(action))
         return ok("opening settings" + backgroundNote())
@@ -297,7 +359,7 @@ class PhoneHost(private val rt: AppRuntime) : DeviceHost {
 
     private fun withAccess(block: (DimtsAccessibilityService) -> CommandResult): CommandResult {
         val s = DimtsAccessibilityService.instance
-            ?: return err("the accessibility service is off - type: grant accessibility   (then switch 'Dimts' on)")
+            ?: return err("the accessibility service is off - type: grant accessibility   (then switch 'Ignis' on)")
         return block(s)
     }
 
@@ -333,22 +395,164 @@ class PhoneHost(private val rt: AppRuntime) : DeviceHost {
 
     private fun audio() = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
-    private fun volume(arg: String?): CommandResult {
+    private val streams = mapOf(
+        "music" to AudioManager.STREAM_MUSIC,
+        "ring" to AudioManager.STREAM_RING,
+        "alarm" to AudioManager.STREAM_ALARM,
+        "notification" to AudioManager.STREAM_NOTIFICATION,
+        "call" to AudioManager.STREAM_VOICE_CALL,
+        "system" to AudioManager.STREAM_SYSTEM,
+    )
+
+    private fun volume(args: List<String>): CommandResult {
         val am = audio()
-        when (arg?.lowercase()) {
-            "up" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
-            "down" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
-            "mute" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, AudioManager.FLAG_SHOW_UI)
-            "unmute" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, AudioManager.FLAG_SHOW_UI)
+        val named = args.firstOrNull()?.lowercase()?.let { streams[it] }
+        val stream = named ?: AudioManager.STREAM_MUSIC
+        val arg = (if (named != null) args.getOrNull(1) else args.firstOrNull())?.lowercase()
+        val usage = "usage: volume [music|ring|alarm|notification|call|system] <up|down|0-100|mute|unmute>"
+        when (arg) {
+            "up" -> am.adjustStreamVolume(stream, AudioManager.ADJUST_RAISE, AudioManager.FLAG_SHOW_UI)
+            "down" -> am.adjustStreamVolume(stream, AudioManager.ADJUST_LOWER, AudioManager.FLAG_SHOW_UI)
+            "mute" -> am.adjustStreamVolume(stream, AudioManager.ADJUST_MUTE, AudioManager.FLAG_SHOW_UI)
+            "unmute" -> am.adjustStreamVolume(stream, AudioManager.ADJUST_UNMUTE, AudioManager.FLAG_SHOW_UI)
             else -> {
                 val n = arg?.removeSuffix("%")?.toIntOrNull()
-                if (n == null || n !in 0..100) return err("usage: volume <up|down|0-100|mute|unmute>")
-                val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                am.setStreamVolume(AudioManager.STREAM_MUSIC, Math.round(n * max / 100f), AudioManager.FLAG_SHOW_UI)
+                if (n == null || n !in 0..100) return err(usage)
+                val max = am.getStreamMaxVolume(stream)
+                am.setStreamVolume(stream, Math.round(n * max / 100f), AudioManager.FLAG_SHOW_UI)
             }
         }
-        val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-        return ok("volume ${am.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / max}%")
+        val max = am.getStreamMaxVolume(stream).coerceAtLeast(1)
+        return ok("volume ${am.getStreamVolume(stream) * 100 / max}%")
+    }
+
+    private fun parseClock(a: List<String>): Triple<Int, Int, Int>? {
+        val first = a.firstOrNull()?.lowercase() ?: return null
+        val m = Regex("^(\\d{1,2})(?::(\\d{2}))?(am|pm)?$").matchEntire(first) ?: return null
+        var used = 1
+        var suffix = m.groupValues[3]
+        if (suffix.isEmpty()) {
+            val next = a.getOrNull(1)?.lowercase()
+            if (next == "am" || next == "pm") { suffix = next; used = 2 }
+        }
+        var h = m.groupValues[1].toInt()
+        val min = m.groupValues[2].ifEmpty { "0" }.toInt()
+        if (suffix == "pm" && h < 12) h += 12
+        if (suffix == "am" && h == 12) h = 0
+        if (h !in 0..23 || min !in 0..59) return null
+        return Triple(h, min, used)
+    }
+
+    private fun setAlarm(a: List<String>): CommandResult {
+        val t = parseClock(a) ?: return err("usage: alarm <time> [label]   (example: alarm 7:30 am wake up)")
+        val label = a.drop(t.third).joinToString(" ")
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM)
+            .putExtra(AlarmClock.EXTRA_HOUR, t.first)
+            .putExtra(AlarmClock.EXTRA_MINUTES, t.second)
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+        if (label.isNotEmpty()) intent.putExtra(AlarmClock.EXTRA_MESSAGE, label)
+        launch(intent)
+        return ok("alarm set for %d:%02d".format(t.first, t.second) + if (label.isNotEmpty()) " ($label)" else "")
+    }
+
+    private val durationUnits = mapOf(
+        "s" to 1L, "sec" to 1L, "secs" to 1L, "second" to 1L, "seconds" to 1L,
+        "m" to 60L, "min" to 60L, "mins" to 60L, "minute" to 60L, "minutes" to 60L,
+        "h" to 3600L, "hr" to 3600L, "hrs" to 3600L, "hour" to 3600L, "hours" to 3600L,
+    )
+
+    private fun setTimer(a: List<String>): CommandResult {
+        var total = 0L
+        var i = 0
+        while (i < a.size) {
+            val n = a[i].toLongOrNull() ?: break
+            val factor = a.getOrNull(i + 1)?.lowercase()?.let { durationUnits[it] }
+            if (factor != null) {
+                total += n * factor
+                i += 2
+            } else {
+                if (i == 0) { total += n * 60; i = 1 }
+                break
+            }
+        }
+        if (total <= 0L || total > 86_400L) return err("usage: timer <duration> [label]   (example: timer 10 min tea)")
+        val label = a.drop(i).joinToString(" ")
+        val intent = Intent(AlarmClock.ACTION_SET_TIMER)
+            .putExtra(AlarmClock.EXTRA_LENGTH, total.toInt())
+            .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+        if (label.isNotEmpty()) intent.putExtra(AlarmClock.EXTRA_MESSAGE, label)
+        launch(intent)
+        return ok("timer started: ${total / 60} min ${total % 60} s" + if (label.isNotEmpty()) " ($label)" else "")
+    }
+
+    private fun copyText(text: String): CommandResult {
+        if (text.isEmpty()) return err("usage: copy <text>")
+        (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("dimts", text))
+        return ok("copied")
+    }
+
+    private fun shareText(text: String): CommandResult {
+        if (text.isEmpty()) return err("usage: share <text>")
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+        launch(Intent.createChooser(send, null))
+        return ok("share sheet opened" + backgroundNote())
+    }
+
+    private fun showMap(place: String): CommandResult {
+        if (place.isEmpty()) return err("usage: map <place>")
+        launch(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(place))))
+        return ok("showing $place" + backgroundNote())
+    }
+
+    private fun brightness(arg: String?): CommandResult {
+        if (!rt.perms.canWriteSettings()) return err("needs 'modify system settings' access - type: grant write_settings")
+        val resolver = ctx.contentResolver
+        if (arg.equals("auto", true)) {
+            Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC)
+            return ok("brightness: auto")
+        }
+        val n = arg?.removeSuffix("%")?.toIntOrNull()
+        if (n == null || n !in 0..100) return err("usage: brightness <0-100|auto>")
+        Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+        Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS, Math.round(n * 255 / 100f))
+        return ok("brightness $n%")
+    }
+
+    private fun rotate(arg: String?): CommandResult {
+        if (!rt.perms.canWriteSettings()) return err("needs 'modify system settings' access - type: grant write_settings")
+        val on = when (arg?.lowercase()) {
+            "on" -> 1
+            "off" -> 0
+            else -> return err("usage: rotate <on|off>")
+        }
+        Settings.System.putInt(ctx.contentResolver, Settings.System.ACCELEROMETER_ROTATION, on)
+        return ok("auto-rotate " + if (on == 1) "on" else "off")
+    }
+
+    private fun dnd(arg: String?): CommandResult {
+        if (!rt.perms.hasDndAccess()) return err("needs Do-Not-Disturb access - type: grant dnd")
+        val filter = when (arg?.lowercase()) {
+            "on" -> INTERRUPTION_FILTER_NONE
+            "alarms" -> INTERRUPTION_FILTER_ALARMS
+            "priority" -> INTERRUPTION_FILTER_PRIORITY
+            "off" -> INTERRUPTION_FILTER_ALL
+            else -> return err("usage: dnd <on|off|alarms|priority>")
+        }
+        (ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).setInterruptionFilter(filter)
+        return ok("do not disturb: $arg")
+    }
+
+    @Suppress("DEPRECATION")
+    private fun vibrate(ms: Long): CommandResult {
+        val time = ms.coerceIn(20L, 5000L)
+        val vibrator: Vibrator = if (Build.VERSION.SDK_INT >= 31) {
+            (ctx.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            ctx.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+        if (!vibrator.hasVibrator()) return err("this phone cannot vibrate")
+        vibrator.vibrate(VibrationEffect.createOneShot(time, VibrationEffect.DEFAULT_AMPLITUDE))
+        return ok()
     }
 
     private fun media(code: Int): CommandResult {

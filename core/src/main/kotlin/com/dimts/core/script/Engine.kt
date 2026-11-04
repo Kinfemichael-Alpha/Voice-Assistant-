@@ -47,8 +47,11 @@ class Engine(
     private val runner: CommandRunner,
     private val log: LogSink,
     private val knownEvents: Set<String> = Builtins.EVENTS,
+    private val reserved: (String) -> Boolean = { false },
 ) {
     val vars = LinkedHashMap<String, Value>()
+    private val derived = LinkedHashMap<String, StateDefStmt>()
+    private val actions = LinkedHashMap<String, DefStmt>()
 
     private class Rule(val id: Int, val key: String?, val stmt: RuleStmt) {
         var prev = false
@@ -56,7 +59,12 @@ class Engine(
         var due = 0L
     }
 
-    private class Frame(val stmts: List<Stmt>, var remaining: Int = 1) {
+    private class Frame(
+        val stmts: List<Stmt>,
+        var remaining: Int = 1,
+        val loopCond: Expr? = null,
+        val isLoop: Boolean = false,
+    ) {
         var idx = 0
     }
 
@@ -85,7 +93,7 @@ class Engine(
 
     private fun context(windowStart: Long? = null): EvalContext {
         val cur = localMinutes()
-        return EvalContext(vars, env, cur, windowStart ?: (cur - 1), pulses, knownEvents)
+        return EvalContext(vars, env, cur, windowStart ?: (cur - 1), pulses, knownEvents, derived)
     }
 
     fun evalNow(expr: String): Value = Evaluator.eval(Parser.parseExpression(expr), context())
@@ -132,6 +140,38 @@ class Engine(
             pulses = saved
         }
         evaluateRules() // let "prev" fall back to false so the next event can fire again
+    }
+
+    fun derivedStates(): List<StateDefStmt> = derived.values.toList()
+
+    fun actionDefs(): List<DefStmt> = actions.values.toList()
+
+    fun hasAction(name: String): Boolean = actions.containsKey(name.lowercase())
+
+    fun removeDefinition(name: String): Boolean {
+        val removedAction = actions.remove(name.lowercase()) != null
+        val removedState = derived.remove(name) != null
+        if (removedAction || removedState) changed()
+        return removedAction || removedState
+    }
+
+    fun needsPolling(): Boolean =
+        rules.values.any { r -> r.stmt.kind == RuleKind.WHEN && r.stmt.cond?.let { usesState(it) } == true }
+
+    private fun usesState(e: Expr): Boolean = when (e) {
+        is Name -> {
+            val d = derived[e.name]
+            when {
+                d != null -> usesState(d.expr)
+                e.name in knownEvents || e.name in vars -> false
+                else -> '.' in e.name || e.name in env.names() || e.name == "random"
+            }
+        }
+        is Not -> usesState(e.e)
+        is Neg -> usesState(e.e)
+        is Bin -> usesState(e.l) || usesState(e.r)
+        is Between -> usesState(e.e) || usesState(e.lo) || usesState(e.hi)
+        is Lit -> false
     }
 
     fun rules(): List<RuleInfo> = rules.values.map { RuleInfo(it.id, it.stmt.label, it.stmt.source, wakeOf(it)) }
@@ -190,7 +230,7 @@ class Engine(
     }
 
     private fun usesTime(e: Expr): Boolean = when (e) {
-        is Name -> e.name == "time"
+        is Name -> e.name == "time" || (derived[e.name]?.let { usesTime(it.expr) } ?: false)
         is Not -> usesTime(e.e)
         is Neg -> usesTime(e.e)
         is Bin -> usesTime(e.l) || usesTime(e.r)
@@ -205,9 +245,18 @@ class Engine(
             is Neg -> timeLiterals(e.e, out)
             is Bin -> { timeLiterals(e.l, out); timeLiterals(e.r, out) }
             is Between -> { timeLiterals(e.e, out); timeLiterals(e.lo, out); timeLiterals(e.hi, out) }
-            is Name -> {}
+            is Name -> { derived[e.name]?.let { timeLiterals(it.expr, out) } }
         }
         return out
+    }
+
+    private fun dependsOn(expr: Expr, target: String, seen: MutableSet<String> = HashSet()): Boolean {
+        for (n in Parser.namesUsed(listOf(SetStmt(0, "_", expr)))) {
+            if (n == target) return true
+            val d = derived[n] ?: continue
+            if (seen.add(n) && dependsOn(d.expr, target, seen)) return true
+        }
+        return false
     }
 
     // ---- validation ------------------------------------------------------------------------
@@ -219,6 +268,7 @@ class Engine(
         known.addAll(Builtins.NAMES)
         known.addAll(env.names())
         known.addAll(knownEvents)
+        known.addAll(derived.keys)
         known.addAll(Parser.assignedNames(program.stmts))
         val warnings = ArrayList<String>()
         for (n in Parser.namesUsed(program.stmts)) {
@@ -232,7 +282,7 @@ class Engine(
         return warnings
     }
 
-    fun knownNames(): List<String> = (Builtins.NAMES + env.names() + knownEvents + vars.keys).sorted()
+    fun knownNames(): List<String> = (Builtins.NAMES + env.names() + knownEvents + derived.keys + vars.keys).sorted()
 
     // ---- rules -----------------------------------------------------------------------------
 
@@ -307,9 +357,16 @@ class Engine(
         try {
             while (task.frames.isNotEmpty()) {
                 if (++steps > MAX_STEPS) throw ScriptError("stopped: too many steps (is something looping?)")
+                if (task.frames.size > MAX_DEPTH) throw ScriptError("stopped: nested too deeply (does an action call itself forever?)")
                 val frame = task.frames.last()
                 if (frame.idx >= frame.stmts.size) {
-                    if (frame.remaining > 1) {
+                    if (frame.loopCond != null) {
+                        if (Evaluator.eval(frame.loopCond, context()).truthy()) {
+                            frame.idx = 0
+                        } else {
+                            task.frames.removeAt(task.frames.size - 1)
+                        }
+                    } else if (frame.remaining > 1) {
                         frame.remaining--
                         frame.idx = 0
                     } else {
@@ -336,6 +393,14 @@ class Engine(
             is CommandStmt -> {
                 val c = context()
                 val words = stmt.words.map { Evaluator.text(it, c) }
+                val action = words.firstOrNull()?.let { actions[it.lowercase()] }
+                if (action != null) {
+                    vars.keys.removeAll { it == "args" || ARG_VAR.matches(it) }
+                    words.drop(1).forEachIndexed { i, w -> vars["arg${i + 1}"] = Value.Str(w) }
+                    vars["args"] = Value.Num((words.size - 1).toDouble())
+                    task.frames.add(Frame(action.body))
+                    return true
+                }
                 val result = try {
                     runner.run(words, task.origin)
                 } catch (e: ScriptError) {
@@ -372,9 +437,17 @@ class Engine(
                 val count = (n as? Value.Num)?.v?.toInt()
                     ?: throw ScriptError("repeat needs a number, not ${n.typeName()}")
                 if (count > MAX_REPEAT) throw ScriptError("repeat is limited to $MAX_REPEAT times")
-                if (count > 0) task.frames.add(Frame(stmt.body, count))
+                if (count > 0) task.frames.add(Frame(stmt.body, count, null, true))
             }
+            is WhileStmt -> {
+                if (Evaluator.eval(stmt.cond, context()).truthy()) task.frames.add(Frame(stmt.body, 1, stmt.cond, true))
+            }
+            is BreakStmt -> if (!unwindLoop(task, true)) throw ScriptError("'break' only works inside 'repeat' or 'while'")
+            is ContinueStmt -> if (!unwindLoop(task, false)) throw ScriptError("'continue' only works inside 'repeat' or 'while'")
+            is DefStmt -> defineAction(stmt, task)
+            is StateDefStmt -> defineState(stmt, task)
             is SetStmt -> {
+                if (derived.containsKey(stmt.name)) throw ScriptError("'${stmt.name}' is a defined state - use 'undef ${stmt.name}' first")
                 vars[stmt.name] = Evaluator.eval(stmt.expr, context())
                 changed()
             }
@@ -384,12 +457,40 @@ class Engine(
         return true
     }
 
+    private fun unwindLoop(task: Task, exit: Boolean): Boolean {
+        val i = task.frames.indexOfLast { it.isLoop }
+        if (i < 0) return false
+        while (task.frames.size > i + 1) task.frames.removeAt(task.frames.size - 1)
+        val loop = task.frames[i]
+        if (exit) task.frames.removeAt(i) else loop.idx = loop.stmts.size
+        return true
+    }
+
+    private fun defineAction(stmt: DefStmt, task: Task) {
+        val key = stmt.name.lowercase()
+        if (reserved(key)) throw ScriptError("'${stmt.name}' is already a command - choose another name")
+        actions[key] = stmt
+        changed()
+        say(task, Level.INFO, "action '${stmt.name}' defined  (run it by typing its name)")
+    }
+
+    private fun defineState(stmt: StateDefStmt, task: Task) {
+        val n = stmt.name
+        if (n in Builtins.NAMES || n in env.names() || n in knownEvents) throw ScriptError("'$n' is a built-in name - choose another")
+        if (vars.containsKey(n)) throw ScriptError("'$n' is a variable - use 'unset $n' first")
+        if (dependsOn(stmt.expr, n)) throw ScriptError("'$n' cannot be defined in terms of itself")
+        derived[n] = stmt
+        changed()
+        say(task, Level.INFO, "state '$n' defined  (use it in if / when / while)")
+    }
+
     // ---- persistence -----------------------------------------------------------------------
 
     /** Serialises variables and waiting rules (not running `wait` jobs). */
     fun save(): String {
         val sb = StringBuilder("dimts-state 1\n")
         for ((k, v) in vars) {
+            if (k == "args" || ARG_VAR.matches(k)) continue
             val (type, text) = when (v) {
                 is Value.Num -> "N" to v.v.toString()
                 is Value.Str -> "S" to v.v
@@ -399,6 +500,8 @@ class Engine(
             }
             sb.append("V\t").append(esc(k)).append('\t').append(type).append('\t').append(esc(text)).append('\n')
         }
+        for (s in derived.values) sb.append("S\t").append(esc(s.source)).append('\n')
+        for (a in actions.values) sb.append("D\t").append(esc(a.source)).append('\n')
         for (r in rules.values) {
             sb.append("R\t").append(r.id).append('\t').append(r.due).append('\t').append(r.windowStart).append('\t')
                 .append(esc(r.key ?: "")).append('\t').append(esc(r.stmt.source)).append('\n')
@@ -425,6 +528,14 @@ class Engine(
                         "T" -> Value.Time(unesc(f[3]).toInt())
                         "Z" -> Value.Null
                         else -> Value.Str(unesc(f[3]))
+                    }
+                    "S" -> {
+                        val def = Parser.parse(unesc(f[1])).stmts.singleOrNull() as? StateDefStmt
+                        if (def != null) derived[def.name] = def
+                    }
+                    "D" -> {
+                        val def = Parser.parse(unesc(f[1])).stmts.singleOrNull() as? DefStmt
+                        if (def != null) actions[def.name.lowercase()] = def
                     }
                     "R" -> {
                         val program = Parser.parse(unesc(f[5]))
@@ -472,6 +583,8 @@ class Engine(
     companion object {
         const val MAX_STEPS = 100_000
         const val MAX_REPEAT = 1_000
+        const val MAX_DEPTH = 200
         const val CATCH_UP_MINUTES = 120L
+        private val ARG_VAR = Regex("arg\\d+")
     }
 }

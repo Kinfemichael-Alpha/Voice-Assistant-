@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Ignis</string>
-    <string name="accessibility_label">Dimts screen control</string>
-    <string name="accessibility_description">Lets Dimts press Back and Home, scroll, swipe, tap and type for the commands you give it. It only acts when you (or a rule you wrote) run a command.</string>
+    <string name="accessibility_label">Ignis screen control</string>
+    <string name="accessibility_description">Lets Ignis press Back and Home, scroll, swipe, tap and type for the commands you give it. It only acts when you (or a rule you wrote) run a command.</string>
     <string name="input_hint">type a command  (help)</string>
     <string name="notif_channel">Dimts background service</string>
-    <string name="notif_title">Dimts</string>
+    <string name="notif_title">Ignis</string>
     <string name="notif_listening">Listening for your key sound</string>
     <string name="notif_assistant">Voice assistant is active</string>
     <string name="notif_rules">Waiting rules are running</string>

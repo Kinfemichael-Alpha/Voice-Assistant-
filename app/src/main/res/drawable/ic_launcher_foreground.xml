@@ -4,10 +4,13 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- five sound-wave bars inside the 66dp safe zone -->
-    <path android:fillColor="#00E676" android:pathData="M30,46h6v16h-6z" />
-    <path android:fillColor="#00E676" android:pathData="M40,38h6v32h-6z" />
-    <path android:fillColor="#00E676" android:pathData="M51,30h6v48h-6z" />
-    <path android:fillColor="#00E676" android:pathData="M62,38h6v32h-6z" />
-    <path android:fillColor="#00E676" android:pathData="M72,46h6v16h-6z" />
+    <path
+        android:fillColor="#FF6D00"
+        android:pathData="M54,20 C56,32 70,40 72,58 C74,74 65,88 54,88 C43,88 34,74 36,58 C37,50 41,44 45,40 C46,48 49,51 52,52 C50,42 51,30 54,20 Z" />
+    <path
+        android:fillColor="#FFD600"
+        android:pathData="M54,54 C57,62 64,66 64,75 C64,82 59,86 54,86 C49,86 44,82 44,75 C44,68 50,64 54,54 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,70 C55.5,74 58.5,75.5 58.5,79 C58.5,82 56.5,84 54,84 C51.5,84 49.5,82 49.5,79 C49.5,76 52.5,74 54,70 Z" />
 </vector>

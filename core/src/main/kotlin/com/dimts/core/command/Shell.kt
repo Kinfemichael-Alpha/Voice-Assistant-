@@ -41,7 +41,17 @@ class Shell(
     val registry: CommandRegistry = Commands.registry,
     private val versionName: String = "0.1.0",
 ) {
-    val engine: Engine = Engine(clock, env, CommandRunner { words, origin -> execute(words, origin) }, log)
+    val engine: Engine = Engine(
+        clock, env, CommandRunner { words, origin -> execute(words, origin) }, log,
+        reserved = { name -> registry.resolve(listOf(name)) != null },
+    )
+
+    private fun live(name: String): String? = try {
+        val v = engine.evalNow(name)
+        if (v === Value.Null) null else display(v)
+    } catch (e: ScriptError) {
+        null
+    }
 
     /** Runs typed or spoken text (one line or a whole script). Returns the syntax error, if any. */
     fun submit(text: String, origin: Origin = Origin.CONSOLE): ScriptError? {
@@ -94,7 +104,15 @@ class Shell(
     private fun builtin(r: Resolved): CommandResult? {
         val a = r.args
         return when (r.spec.id) {
-            "help" -> CommandResult.ok(Help.render(registry, a))
+            "help" -> CommandResult.ok(Help.render(registry, a) { live(it) })
+            "states" -> CommandResult.ok(Help.states(a.joinToString(" "), { live(it) }, engine.derivedStates()))
+            "events" -> CommandResult.ok(Help.events())
+            "actions" -> CommandResult.ok(Help.actions(registry, a.joinToString(" "), engine.actionDefs()))
+            "defs" -> CommandResult.ok(describeDefs())
+            "undef" -> {
+                val name = a.firstOrNull() ?: return CommandResult.error("usage: undef <name>  (see 'defs')")
+                if (engine.removeDefinition(name)) CommandResult.ok("$name removed") else CommandResult.error("nothing defined as '$name'")
+            }
             "echo" -> CommandResult.ok(a.joinToString(" "))
             "version" -> CommandResult.ok("Dimts $versionName")
             "rules" -> CommandResult.ok(describeRules())
@@ -134,6 +152,18 @@ class Shell(
             )
             else -> null
         }
+    }
+
+    private fun describeDefs(): String {
+        val states = engine.derivedStates()
+        val actions = engine.actionDefs()
+        if (states.isEmpty() && actions.isEmpty()) {
+            return "nothing defined yet\n  state night = time between 10 pm and 6 am\n  def night_mode:\n      volume 10"
+        }
+        val sb = StringBuilder()
+        for (s in states) sb.append(s.source).append('\n')
+        for (a in actions) sb.append(a.source).append('\n')
+        return sb.toString().trimEnd()
     }
 
     private fun describeRules(): String {

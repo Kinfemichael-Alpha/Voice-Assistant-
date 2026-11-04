@@ -21,13 +21,14 @@ object EmptyEnvironment : Environment {
 
 object Builtins {
     /** Names the engine itself provides. */
-    val NAMES = setOf("time", "hour", "minute", "day")
+    val NAMES = setOf("time", "hour", "minute", "day", "date", "month", "year", "random")
 
     /** One-shot events the app emits; each is true only while it is being delivered. */
     val EVENTS = setOf(
-        "call.incoming", "call.answered", "call.started", "call.ended",
+        "call.incoming", "call.answered", "call.started", "call.ended", "call.missed",
         "key.heard", "assistant.started", "assistant.stopped",
-        "screen.on", "screen.off", "power.connected", "power.disconnected", "boot",
+        "screen.on", "screen.off", "screen.unlocked", "power.connected", "power.disconnected",
+        "battery.low", "battery.okay", "boot",
     )
 }
 
@@ -40,6 +41,7 @@ class EvalContext(
     val windowStart: Long,
     val pulses: Set<String>,
     val knownEvents: Set<String>,
+    val derived: Map<String, StateDefStmt> = emptyMap(),
 )
 
 object Evaluator {
@@ -57,11 +59,16 @@ object Evaluator {
 
     fun lookup(name: String, c: EvalContext): Value {
         c.vars[name]?.let { return it }
+        c.derived[name]?.let { return eval(it.expr, c) }
         when (name) {
             "time" -> return Value.Time(Math.floorMod(c.localMinutes, 1440L).toInt())
             "hour" -> return Value.Num((Math.floorMod(c.localMinutes, 1440L) / 60).toDouble())
             "minute" -> return Value.Num((Math.floorMod(c.localMinutes, 60L)).toDouble())
             "day" -> return Value.Str(Days.nameOf(c.localMinutes))
+            "date" -> return Value.Num(localDate(c).dayOfMonth.toDouble())
+            "month" -> return Value.Num(localDate(c).monthValue.toDouble())
+            "year" -> return Value.Num(localDate(c).year.toDouble())
+            "random" -> return Value.Num(kotlin.random.Random.nextInt(100).toDouble())
         }
         if (name in c.pulses) return Value.Bool(true)
         c.env.lookup(name)?.let { return it }
@@ -69,6 +76,9 @@ object Evaluator {
         // Dotted names that nobody provides are "nothing"; bare words are just text (day is monday).
         return if ('.' in name) Value.Null else Value.Str(name)
     }
+
+    private fun localDate(c: EvalContext): java.time.LocalDate =
+        java.time.LocalDate.ofEpochDay(Math.floorDiv(c.localMinutes, 1440L))
 
     fun text(word: Word, c: EvalContext): String {
         val sb = StringBuilder()

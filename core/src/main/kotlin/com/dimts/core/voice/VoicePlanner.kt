@@ -124,6 +124,22 @@ class VoicePlanner(private val registry: CommandRegistry) {
             run("say \"Battery is {battery.level} percent\"", "Battery")
         },
         r("help|what can you do|commands") { run("help", "Help") },
+        r("(?:show |list |tell me )?(?:all )?(?:the )?(?:current )?(?:conditions|states|phone status)") { run("states", "Current conditions") },
+        r("(?:show |list |tell me )?(?:all )?(?:the )?(?:possible )?actions") { run("actions", "Possible actions") },
+        r("(?:pick|choose|select|option|number|take)(?: option| number)? (.+)") {
+            NumberWords.parse(it.groupValues[1])?.takeIf { n -> n in 1..9 }?.let { n -> run("pick $n", "Option $n") }
+        },
+        r("(?:the )?(first|second|third|fourth|fifth)(?: one| option)?") {
+            val n = listOf("first", "second", "third", "fourth", "fifth").indexOf(it.groupValues[1]) + 1
+            run("pick $n", "Option $n")
+        },
+        r("(?:set |start )?(?:a )?timer(?: for)? (.+)") { run("timer ${it.groupValues[1]}", "Timer") },
+        r("(?:set )?(?:an? )?alarm(?: for| at)? (.+)") { run("alarm ${it.groupValues[1]}", "Alarm") },
+        r("(?:turn |switch )?(on|off)(?: the)? (?:do not disturb|dnd)|(?:do not disturb|dnd) (on|off)") {
+            val state = it.groupValues[1].ifEmpty { it.groupValues[2] }
+            run("dnd $state", "Do not disturb $state")
+        },
+        r("vibrate|buzz") { run("vibrate", "Vibrating") },
 
         // settings, search, apps
         r("(?:open )?(wi ?fi|bluetooth|display|sound|battery|apps|location|accessibility|airplane) settings") {

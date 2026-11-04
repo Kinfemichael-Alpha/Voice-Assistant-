@@ -1,18 +1,103 @@
 package com.dimts.core.command
 
+import com.dimts.core.script.DefStmt
+import com.dimts.core.script.StateDefStmt
+
 /** Text for the `help` command. Everything here describes behaviour that the engine really has. */
 object Help {
-    fun render(registry: CommandRegistry, topicWords: List<String>): String {
+    fun render(registry: CommandRegistry, topicWords: List<String>, live: (String) -> String? = { null }): String {
         if (topicWords.isEmpty()) return overview(registry)
         val topic = topicWords.joinToString(" ").lowercase()
 
         registry.find(topicWords)?.let { return command(it) }
         Category.entries.firstOrNull { it.key == topic || it.title.lowercase().startsWith(topic) }?.let { return category(registry, it) }
         TOPICS[topic]?.let { return it.trimIndent() }
+        Catalog.state(topic)?.let { return stateDetail(it, live(it.name)) }
+        Catalog.event(topic)?.let { return "${it.name}  (event)\n  ${it.summary}\n  example: whenever ${it.name}: say \"it happened\"" }
+        Catalog.groups.firstOrNull { it.first == topic }?.let { return states(topic, live, emptyList()) }
 
-        val choices = registry.allNames() + TOPICS.keys + Category.entries.map { it.key }
+        val choices = registry.allNames() + TOPICS.keys + Category.entries.map { it.key } + Catalog.states.map { it.name } + Catalog.events.map { it.name }
         val hint = com.dimts.core.Fuzzy.closest(topic, choices)
         return "No help for '$topic'." + (hint?.let { " Did you mean 'help $it'?" } ?: "") + "\nType 'help' for the list."
+    }
+
+    fun stateDetail(spec: StateSpec, live: String?): String {
+        val example = when {
+            spec.name == "time" -> "if time between 10 pm and 6 am: say \"night\""
+            spec.kind == "yes/no" -> "when ${spec.name}: say \"it is true\""
+            spec.kind == "number" -> "if ${spec.name} < 20: say \"low\""
+            else -> "if ${spec.name} is something: say \"match\""
+        }
+        val sb = StringBuilder()
+        sb.append(spec.name).append("  (").append(spec.kind).append(")\n")
+        sb.append("  ").append(spec.summary).append('\n')
+        if (spec.values.isNotEmpty()) sb.append("  values: ").append(spec.values).append('\n')
+        sb.append("  now: ").append(live ?: "unavailable").append('\n')
+        sb.append("  example: ").append(example)
+        return sb.toString()
+    }
+
+    fun states(filter: String, live: (String) -> String?, mine: List<StateDefStmt>): String {
+        val f = filter.trim().lowercase()
+        if (f.isNotEmpty()) Catalog.state(f)?.let { return stateDetail(it, live(it.name)) }
+        val matches = Catalog.states.filter { f.isEmpty() || it.group == f || it.name.contains(f) }
+        val sb = StringBuilder()
+        for ((key, title) in Catalog.groups) {
+            val items = matches.filter { it.group == key }
+            if (items.isEmpty()) continue
+            sb.append(title).append('\n')
+            for (st in items) {
+                sb.append("  ").append(st.name.padEnd(20)).append(" = ").append((live(st.name) ?: "-").padEnd(10)).append(' ').append(st.summary).append('\n')
+            }
+            sb.append('\n')
+        }
+        val own = mine.filter { f.isEmpty() || f == "mine" || it.name.lowercase().contains(f) }
+        if (own.isNotEmpty()) {
+            sb.append("YOUR STATES (state)\n")
+            for (d in own) {
+                sb.append("  ").append(d.name.padEnd(20)).append(" = ").append((live(d.name) ?: "-").padEnd(10)).append(' ')
+                    .append(d.source.substringAfter('=').trim()).append('\n')
+            }
+            sb.append('\n')
+        }
+        if (sb.isEmpty()) return "No state matches '$filter'.  Type 'states' to see them all."
+        if (f.isEmpty()) sb.append("Use any state:  if battery.level < 20: say \"low\"   |   whenever wifi.connected: say \"online\"\n")
+        return sb.toString().trimEnd()
+    }
+
+    fun events(): String {
+        val sb = StringBuilder("EVENTS (true only at the instant they happen)\n")
+        for (e in Catalog.events) sb.append("  ").append(e.name.padEnd(20)).append(' ').append(e.summary).append('\n')
+        sb.append("\nUse:  whenever call.missed: notify \"missed a call\"\n      when screen.unlocked: say \"welcome back\"")
+        return sb.toString()
+    }
+
+    fun actions(registry: CommandRegistry, filter: String, mine: List<DefStmt>): String {
+        val f = filter.trim().lowercase()
+        val sb = StringBuilder()
+        for (cat in Category.entries) {
+            val items = registry.specs.filter { s ->
+                s.category == cat && (
+                    f.isEmpty() || cat.key == f ||
+                        s.names.any { n -> n.joinToString(" ").contains(f) } || s.summary.lowercase().contains(f)
+                    )
+            }
+            if (items.isEmpty()) continue
+            sb.append(cat.title.uppercase()).append('\n')
+            for (s in items) sb.append("  ").append(s.usage.padEnd(34)).append(' ').append(s.summary.substringBefore(". ").trimEnd('.')).append('\n')
+            sb.append('\n')
+        }
+        val own = mine.filter { f.isEmpty() || f == "mine" || it.name.lowercase().contains(f) }
+        if (own.isNotEmpty()) {
+            sb.append("YOUR ACTIONS (def)\n")
+            for (d in own) {
+                val first = d.source.lines().drop(1).firstOrNull()?.trim() ?: d.source.substringAfter(':').trim()
+                sb.append("  ").append(d.name.padEnd(34)).append(' ').append(first).append('\n')
+            }
+            sb.append('\n')
+        }
+        if (sb.isEmpty()) return "No action matches '$filter'.  Type 'actions' to list them all."
+        return sb.toString().trimEnd()
     }
 
     fun overview(registry: CommandRegistry): String {
@@ -30,8 +115,13 @@ object Help {
         sb.append("  at 10:30 pm: call mom              run once at a time\n")
         sb.append("  when call.answered: hangup         wait for an event or a state\n")
         sb.append("  if battery.level < 20: say \"low\"   check now\n")
-        sb.append("  topics: help script | if | when | at | every | after | wait | repeat | set\n")
-        sb.append("          help time | names | events | examples | voice | keys | permissions | limits\n")
+        sb.append("  while battery.level < 80: wait 5 min   loop while a state holds\n")
+        sb.append("  def night: volume 10               your own action, run it by name\n")
+        sb.append("  state night = time between 10 pm and 6 am   your own state\n")
+        sb.append("  topics: help script | if | when | while | at | every | after | wait | repeat | set | def | state\n")
+        sb.append("          help time | names | examples | voice | keys | permissions | limits\n")
+        sb.append("  look up: all current conditions | all possible actions | events | defs\n")
+        sb.append("           help <state or event name>   e.g. help battery.level      help concepts\n")
         return sb.toString().trimEnd()
     }
 
@@ -146,8 +236,89 @@ object Help {
                   volume up
                   wait 1 s
         """,
+        "while" to """
+            while CONDITION:  ...        repeat the block as long as the condition is true
+            break                        leave the loop        continue   jump to the next round
+
+              set n = 0
+              while n < 3:
+                  n += 1
+                  say "round {n}"
+
+              while battery.level < 80 and battery.charging:
+                  wait 1 min
+              say "charged"
+
+            A loop is stopped after 100000 steps so a mistake cannot freeze the phone.
+        """,
+        "def" to """
+            def NAME:  ...         define your own action. Run it later by typing its name.
+            Arguments arrive as arg1, arg2 ... and {args} is how many were given.
+
+              def night:
+                  volume 10
+                  brightness 5
+                  dnd on
+                  say "good night"
+
+              def greet:
+                  say "hello {arg1}"
+
+              night
+              greet Kinfemichael
+              at 11 pm: night
+
+            Actions are saved. 'defs' lists them, 'undef NAME' deletes one. Actions can call other actions.
+        """,
+        "state" to """
+            state NAME = CONDITION     define your own state: a name for a condition you reuse
+
+              state night = time between 10 pm and 6 am
+              state low_power = battery.level < 20 and not battery.charging
+              state at_home = wifi.connected
+
+              if low_power: say "please charge me"
+              whenever low_power: notify "battery low"
+              while night: wait 10 min
+
+            A state is always up to date when you read it. Names can be combined:
+              state quiet_hours = night and not call.incoming
+            'states' lists all states with their live values, 'defs' shows yours, 'undef NAME' deletes one.
+        """,
+        "concepts" to """
+            A STATE is something that IS true right now: battery.level, wifi.connected, screen.locked ...
+            An ACTION is something you DO: volume, call, flashlight, lock ...
+            An EVENT is something that HAPPENS at one instant: call.missed, screen.unlocked ...
+
+              all current conditions   every state with its live value   (also: states, states battery)
+              help battery.level       explains one state, with an example
+              all possible actions     every action                      (also: actions, actions sound)
+              events                   every event
+
+            Putting them together, exactly like Python:
+              if battery.level < 20: flashlight on
+              if wifi.connected and not battery.charging: say "unplugged and online"
+              whenever call.missed: notify "missed a call"
+              while screen.awake: wait 1 min
+        """,
+        "nesting" to """
+            Blocks go inside blocks. Indent with spaces; each header ends with ':'.
+
+              at 11 pm:
+                  if battery.level < 30:
+                      notify "charge me"
+                      when power.connected:
+                          say "thanks"
+                  else:
+                      repeat 3:
+                          vibrate
+                          wait 1 s
+
+            Allowed inside each other: if / elif / else, while, repeat, when, whenever, at, every, after, def, state.
+        """,
         "set" to """
             set NAME = EXPRESSION       (the word 'set' is optional)
+            Shortcuts: x += 1   x -= 1   x *= 2   x /= 2   x %= 3
             Numbers, "text", true/false, times (10:30 pm). + - * / %  and text joining with +.
             Use a variable inside a command with ${'$'}NAME or {EXPRESSION}:
 
@@ -167,25 +338,10 @@ object Help {
             Example:  whenever call.incoming and time between 10 pm and 6 am: say "late call"
         """,
         "names" to """
-            Names you can use in conditions. Type 'names' to see the live list.
-            time, hour, minute, day
-            battery.level  battery.charging  call.state (idle|ringing|offhook)
-            call.contact / call.number = the other side of the current call (the contact's name when it is in your contacts;
-            for incoming calls the Phone permission is needed - see 'permissions')
-            app.current  wifi.connected  volume  assistant.state  listening
-            Events (true only at the moment they happen): call.incoming call.answered call.started call.ended
-            key.heard assistant.started assistant.stopped screen.on screen.off power.connected power.disconnected boot
+            Type 'names' for the live list of every name, 'states' for states with their current values,
+            'events' for events, and 'help <name>' for one of them (help battery.level).
+            Groups: time, battery, network, screen, sound, phone, system, assistant.
             Unknown dotted names (like mom.picked_up) are always empty - you get a warning with a suggestion.
-        """,
-        "events" to """
-            Events are one-time moments. Use them with 'when' or 'whenever'.
-              call.incoming    a call starts ringing
-              call.answered    you answered an incoming call (Android cannot tell when the OTHER person answers your outgoing call)
-              call.started     you dialled out
-              call.ended       a call finished
-              key.heard        your key sound was heard
-              assistant.started / assistant.stopped
-              screen.on / screen.off     power.connected / power.disconnected      boot
         """,
         "examples" to """
             # Call mom at 10:30 pm, and hang up if she answers (nested rule)
@@ -213,6 +369,27 @@ object Help {
             at 9 pm:
                 call mom
                 after 30 s: hangup
+
+            # Your own states and actions
+            state night = time between 10 pm and 6 am
+            state low_power = battery.level < 20 and not battery.charging
+            def sleep_mode:
+                volume 10
+                dnd on
+                say "good night"
+            whenever low_power: notify "battery low"
+            at 11 pm: sleep_mode
+
+            # Nested logic with a loop
+            set n = 0
+            while n < 3:
+                n += 1
+                if n == 2: continue
+                vibrate 200
+                wait 1 s
+
+            # React to a missed call
+            whenever call.missed: notify "you missed a call from {call.contact}"
         """,
         "voice" to """
             1) Record your key sound:      record key wake_word      (say it when the app beeps, 4 times)

@@ -46,5 +46,10 @@ data class RepeatStmt(override val line: Int, val count: Expr, val body: List<St
 data class SetStmt(override val line: Int, val name: String, val expr: Expr) : Stmt
 data class PassStmt(override val line: Int) : Stmt
 data class StopStmt(override val line: Int) : Stmt
+data class WhileStmt(override val line: Int, val cond: Expr, val body: List<Stmt>) : Stmt
+data class BreakStmt(override val line: Int) : Stmt
+data class ContinueStmt(override val line: Int) : Stmt
+data class DefStmt(override val line: Int, val name: String, val body: List<Stmt>, val source: String) : Stmt
+data class StateDefStmt(override val line: Int, val name: String, val expr: Expr, val source: String) : Stmt
 
 data class Program(val stmts: List<Stmt>)

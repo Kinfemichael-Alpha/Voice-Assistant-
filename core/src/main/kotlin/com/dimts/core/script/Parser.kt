@@ -14,8 +14,11 @@ package com.dimts.core.script
  * `"quoted text"`, `$variable`, and `{expression}` pieces inside words.
  */
 object Parser {
-    private val HEADERS = setOf("if", "elif", "else", "when", "whenever", "at", "every", "after", "repeat")
+    private val HEADERS = setOf("if", "elif", "else", "when", "whenever", "at", "every", "after", "repeat", "while", "def")
+    private val KEYWORDS = HEADERS + setOf("pass", "stop", "wait", "set", "break", "continue", "state")
+    private val ACTION_NAME = Regex("^[\\p{L}_][\\p{L}\\p{N}_]*$")
     private val ASSIGN = Regex("^([\\p{L}_][\\p{L}\\p{N}_.]*)\\s*=(?!=)\\s*(.+)$")
+    private val COMPOUND = Regex("^([\\p{L}_][\\p{L}\\p{N}_.]*)\\s*([+\\-*/%])=(?!=)\\s*(.+)$")
     private const val ESCAPED_BRACE = '\u0000'
 
     private val UNITS = mapOf(
@@ -83,6 +86,9 @@ object Parser {
                 }
                 is RuleStmt -> { s.cond?.let { expr(it) }; namesUsed(s.body, out) }
                 is RepeatStmt -> { expr(s.count); namesUsed(s.body, out) }
+                is WhileStmt -> { expr(s.cond); namesUsed(s.body, out) }
+                is DefStmt -> namesUsed(s.body, out)
+                is StateDefStmt -> expr(s.expr)
                 is SetStmt -> expr(s.expr)
                 else -> {}
             }
@@ -97,6 +103,9 @@ object Parser {
                 is IfStmt -> { s.branches.forEach { assignedNames(it.body, out) }; s.elseBody?.let { assignedNames(it, out) } }
                 is RuleStmt -> assignedNames(s.body, out)
                 is RepeatStmt -> assignedNames(s.body, out)
+                is WhileStmt -> assignedNames(s.body, out)
+                is DefStmt -> assignedNames(s.body, out)
+                is StateDefStmt -> out.add(s.name)
                 else -> {}
             }
         }
@@ -275,6 +284,16 @@ object Parser {
                     val count = ExprParser.parseAll(countText)
                     return RepeatStmt(line.line, count, bodyFor(line, inline, "repeat"))
                 }
+                "while" -> {
+                    val cond = ExprParser.parseAll(head)
+                    return WhileStmt(line.line, cond, bodyFor(line, inline, "while"))
+                }
+                "def" -> {
+                    if (!ACTION_NAME.matches(head)) throw ScriptError("'def' needs a name:  def night_mode:", line.line)
+                    if (head.lowercase() in KEYWORDS) throw ScriptError("'$head' is a reserved word - choose another name", line.line)
+                    val body = bodyFor(line, inline, "def")
+                    return DefStmt(line.line, head, body, sourceOf(line, start))
+                }
             }
             throw ScriptError("unknown keyword '$kw'", line.line)
         }
@@ -283,10 +302,23 @@ object Parser {
             val w = firstWord(text).lowercase()
             if (w == "pass" && text.trim().equals("pass", true)) return PassStmt(no)
             if (w == "stop" && text.trim().equals("stop", true)) return StopStmt(no)
+            if (w == "break" && text.trim().equals("break", true)) return BreakStmt(no)
+            if (w == "continue" && text.trim().equals("continue", true)) return ContinueStmt(no)
+            if (w == "state") {
+                val rest = text.trim().substring(5).trim()
+                val sm = ASSIGN.matchEntire(rest)
+                    ?: throw ScriptError("usage: state NAME = CONDITION   (example: state night = time between 10 pm and 6 am)")
+                return StateDefStmt(no, sm.groupValues[1], ExprParser.parseAll(sm.groupValues[2]), text.trim())
+            }
             if (w == "wait") {
                 return WaitStmt(no, parseDuration(Lexer.tokenize(text.trim().substring(4))))
             }
             val assignText = if (w == "set") text.trim().substring(3).trim() else text.trim()
+            val cm = COMPOUND.matchEntire(assignText)
+            if (cm != null) {
+                val target = cm.groupValues[1]
+                return SetStmt(no, target, Bin(cm.groupValues[2], Name(target), ExprParser.parseAll(cm.groupValues[3])))
+            }
             val m = ASSIGN.matchEntire(assignText)
             if (m != null) return SetStmt(no, m.groupValues[1], ExprParser.parseAll(m.groupValues[2]))
             return CommandStmt(no, parseWords(text))

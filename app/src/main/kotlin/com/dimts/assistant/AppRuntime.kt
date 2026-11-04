@@ -129,6 +129,7 @@ class AppRuntime(val app: Application) {
     // ---- time rules: AlarmManager + a short in-process timer ------------------------------------
 
     private val engineTick = Runnable { shell.engine.tick(); rearm() }
+    private val pollTick = Runnable { shell.engine.tick(); rearm() }
 
     fun onAlarm() {
         shell.engine.tick()
@@ -143,6 +144,8 @@ class AppRuntime(val app: Application) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         handler.removeCallbacks(engineTick)
+        handler.removeCallbacks(pollTick)
+        if (shell.engine.needsPolling()) handler.postDelayed(pollTick, POLL_MS)
         if (next == null) {
             am.cancel(pi)
             return
@@ -167,6 +170,9 @@ class AppRuntime(val app: Application) {
                 Intent.ACTION_POWER_CONNECTED -> { env.charging = true; shell.engine.emit("power.connected") }
                 Intent.ACTION_POWER_DISCONNECTED -> { env.charging = false; shell.engine.emit("power.disconnected") }
                 Intent.ACTION_BATTERY_CHANGED -> { env.updateBattery(intent); shell.engine.tick() }
+                Intent.ACTION_USER_PRESENT -> shell.engine.emit("screen.unlocked")
+                Intent.ACTION_BATTERY_LOW -> shell.engine.emit("battery.low")
+                Intent.ACTION_BATTERY_OKAY -> shell.engine.emit("battery.okay")
             }
         }
     }
@@ -178,6 +184,9 @@ class AppRuntime(val app: Application) {
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_BATTERY_LOW)
+            addAction(Intent.ACTION_BATTERY_OKAY)
         }
         val sticky = ContextCompat.registerReceiver(app, systemReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         env.updateBattery(sticky)
@@ -245,8 +254,10 @@ class AppRuntime(val app: Application) {
             TelephonyManager.EXTRA_STATE_IDLE -> {
                 if (callPrev != "idle") {
                     handler.removeCallbacks(announceIncoming)
+                    val missed = callPrev == "ringing"
                     callPrev = "idle"
                     env.callState = "idle"
+                    if (missed) shell.engine.emit("call.missed")
                     shell.engine.emit("call.ended")
                     env.callContact = ""
                     env.callNumber = ""
@@ -626,5 +637,9 @@ class AppRuntime(val app: Application) {
             "keys: $roles\n" +
             "writer in RAM: ${if (machine.state == SessionState.OFF || machine.state == SessionState.LISTENING) "no" else "yes"}\n" +
             "missing permissions: ${missing.ifEmpty { "none" }}"
+    }
+
+    private companion object {
+        const val POLL_MS = 15_000L
     }
 }
