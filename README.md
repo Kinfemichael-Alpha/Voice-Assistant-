@@ -14,6 +14,8 @@ Ignis is an Android app, written in Kotlin, that you control with a **key sound*
 > all possible actions
 ```
 
+New: switch Wi-Fi / mobile data / Bluetooth / airplane mode from the console (`wifi off`, `data on`), notes, clipboard scripts (`export` / `import`), `until` loops and a lot more commands. Scripts: see [5 Programming guide](#5-programming-guide) and `help python`.
+
 Contents: [1 Install](#1-install) | [2 First start](#2-first-start) | [3 The console](#3-the-console) | [4 States, actions, events](#4-states-actions-and-events) | [5 Programming](#5-programming-guide) | [6 Voice](#6-voice-control) | [7 Opening apps](#7-opening-apps-and-choosing) | [8 Command reference](#8-command-reference) | [9 Examples](#9-examples) | [10 Troubleshooting](#10-troubleshooting) | [11 Limits](#11-what-android-does-not-allow) | [12 Build](#12-build-and-signing)
 
 ---
@@ -102,8 +104,8 @@ defs                        the actions and states you defined yourself
 |---|---|
 | time | `time` `hour` `minute` `day` `date` `month` `year` `random` |
 | battery | `battery.level` `battery.charging` `battery.plugged` (none/ac/usb/wireless) `battery.temperature` `battery.health` `battery.saver` |
-| network | `wifi.connected` `mobile.connected` `network.connected` `network.type` `airplane.mode` `bluetooth.on` `headphones.connected` |
-| screen | `screen.awake` `screen.locked` `screen.brightness` `app.current` |
+| network | `wifi.connected` `wifi.enabled` `mobile.connected` `data.enabled` `network.connected` `network.type` `airplane.mode` `bluetooth.on` `location.enabled` `headphones.connected` |
+| screen | `screen.awake` `screen.locked` `screen.brightness` `screen.text` (all visible text) `app.current` |
 | sound | `volume` `volume.ring` `volume.alarm` `volume.notification` `ringer.mode` `dnd.mode` `audio.playing` `flashlight.on` |
 | phone | `call.state` (idle/ringing/offhook) `call.contact` `call.number` |
 | system | `memory.free` `storage.free` `uptime.minutes` `device.model` `android.version` |
@@ -125,6 +127,24 @@ Type `all possible actions`. Groups: listening, rules, states/events/actions, ph
 
 Blocks are made with **indentation** and every block header ends with `:` (just like Python). Blocks can be nested as deep as you like.
 
+### How to write and switch on a script (Python-style)
+
+Ignis has its own small Python-like language. There is no Python interpreter on the phone and nothing to install or enable: the console already understands it.
+
+1. **One line:** type it and press Enter: `if battery.level < 20: say "low"`
+2. **A block:** a line ending in `:` opens it, indent the next lines with spaces, and press Enter on an **empty line** to run it:
+   ```
+   at 10:30 pm:
+       call mom
+   ```
+3. **A whole script written elsewhere** (notes app, computer): copy it, then type `import`. It runs exactly as if you had typed it. Pasting several lines straight into the console works too.
+4. **What "activated" means:**
+   - a plain line or block runs **once, immediately**;
+   - `at`, `every`, `after`, `when`, `whenever` blocks are **rules**: they stay active, are saved, and run by themselves later (`rules` lists them, `cancel rule N` stops one);
+   - `def NAME:` saves an action you run by typing its name, `state NAME = ...` saves a state;
+   - `export` copies all your rules, states and actions to the clipboard (a backup you can `import` again, also on another phone).
+5. Comments start with `#`. Type `help python` in the app for this explanation.
+
 ### Check now: `if`
 
 ```
@@ -139,7 +159,7 @@ else:
 Conditions: `==  !=  <  <=  >  >=  is  is not  contains  between A and B  and  or  not  ( )`
 Examples: `time between 10 pm and 6 am`, `app.current contains chrome`, `day is monday`, `network.type is wifi`.
 
-### Loops: `while`, `repeat`, `break`, `continue`
+### Loops: `while`, `until`, `repeat`, `break`, `continue`
 
 ```
 set n = 0
@@ -156,7 +176,7 @@ repeat 3:
     vibrate 200
     wait 1 s
 ```
-`break` leaves the loop, `continue` jumps to the next round. A loop is stopped after 100000 steps so a mistake cannot freeze the phone.
+`until COND:` is `while not COND:` (for example `until battery.charging: wait 10 s`). `break` leaves the loop, `continue` jumps to the next round. A loop is stopped after 100000 steps so a mistake cannot freeze the phone.
 
 ### Wait for something: `when`, `whenever`
 
@@ -276,13 +296,19 @@ Type `help <command>` for details and examples. Several names work for most comm
 **States, events, actions**
 `all current conditions` (or `states [filter]`), `events`, `all possible actions` (or `actions [filter]`), `defs`, `undef <name>`
 
+**Switches** (they press the tile in Quick settings through the accessibility service; the tile must be in your panel)
+`wifi [on|off|toggle]`, `data [on|off|toggle]`, `bluetooth [on|off|toggle]`, `airplane [on|off|toggle]`, `hotspot`, `location [on|off|toggle]`, `power saving [on|off|toggle]`. Each one reads the current state first, so `wifi on` does nothing if it is already on, and reports the result.
+
+**Information & tools**
+`now`, `battery`, `net`, `info`, `random [min] [max]`, `coin`, `dice [sides]`, `calc <expression>`, `apps [filter]`, `note <text>`, `notes`, `clear notes`, `paste`, `export`, `import`
+
 **Phone**
-`call <contact|number>`, `hangup`, `answer`, `sms <contact> <text>`, `open <app>`, `pick [number]`, `search <text>`, `browse <url>`, `say <text>`, `notify <text>`, `contact <name>`, `flashlight <on|off|toggle>`, `settings [page]`, `alarm <time> [label]`, `timer <duration> [label]`, `copy <text>`, `share <text>`, `map <place>`
+`call <contact|number>`, `hangup`, `answer`, `sms <contact> <text>`, `open <app>`, `pick [number]`, `search <text>`, `browse <url>`, `say <text>`, `notify <text>`, `contact <name>`, `flashlight <on|off|toggle>`, `keypad <number>`, `camera [photo|video|selfie]`, `email <address> [subject]`, `event <title>`, `youtube <search>`, `settings [page]`, `alarm <time> [label]`, `timer <duration> [label]`, `copy <text>`, `share <text>`, `map <place>`
 
 Settings pages: wifi, bluetooth, display, sound, battery, apps, location, accessibility, airplane, nfc, date, language, storage, privacy, security, vpn, roaming, cast, night, wireless, sync, info, input, usage.
 
 **Screen** (needs accessibility, brightness/rotate need write_settings)
-`back`, `home`, `recents`, `notifications`, `lock`, `scroll <up|down>`, `swipe <dir>`, `tap <x> <y>` or `tap <text on screen>`, `type <text>`, `screenshot`, `read screen`, `brightness <0-100|auto>`, `rotate <on|off>`
+`back`, `home`, `recents`, `notifications`, `lock`, `scroll <up|down>`, `swipe <dir>`, `tap <x> <y>` or `tap <text on screen>`, `type <text>`, `screenshot`, `read screen`, `brightness <0-100|auto>`, `rotate <on|off>`, `panel` (Quick settings), `splitscreen`, `power [menu|off|restart]`
 
 **Sound & media**
 `volume [music|ring|alarm|notification|call|system] <up|down|0-100|mute|unmute>`, `play`, `pause`, `next`, `previous`, `stop music`, `ringer <normal|vibrate|silent>`, `dnd <on|off|alarms|priority>`, `vibrate [ms]`
@@ -290,7 +316,7 @@ Settings pages: wifi, bluetooth, display, sound, battery, apps, location, access
 **System**
 `permissions`, `grant [name|all]`, `status`, `help [topic]`, `clear`, `echo <text>`, `version`, `exit`
 
-Help topics: `help script`, `if`, `while`, `when`, `at`, `every`, `after`, `wait`, `repeat`, `set`, `def`, `state`, `concepts`, `nesting`, `time`, `names`, `examples`, `voice`, `keys`, `permissions`, `limits`.
+Help topics: `help python`, `help script`, `if`, `while`, `when`, `at`, `every`, `after`, `wait`, `repeat`, `set`, `def`, `state`, `concepts`, `nesting`, `time`, `names`, `examples`, `voice`, `keys`, `permissions`, `limits`.
 
 ---
 
@@ -326,6 +352,18 @@ whenever screen.unlocked:
 every 45 min:
     if time between 8 am and 6 pm: notify "stretch"
 
+# Turn Wi-Fi off at night and on in the morning
+at 11 pm: wifi off
+at 6 am: wifi on
+
+# Save mobile data: switch it off when on Wi-Fi
+whenever wifi.connected and data.enabled: data off
+
+# Press a button that shows up on the screen
+while not screen.text contains "Install":
+    wait 2 s
+tap Install
+
 # Warn when plugged in too long
 when power.connected:
     wait 2 h
@@ -357,8 +395,9 @@ when power.connected:
 These are Android rules, not bugs:
 
 - Unlocking the phone by voice (locking works).
+- Real shutdown: apps have no permission for it. `power off` opens the power menu and presses the button for you through the accessibility service (it works only if the button text is found, and `power` alone just opens the menu).
+- Switching Wi-Fi, data, Bluetooth directly: Ignis presses the Quick settings tile instead. If your panel does not contain the tile, it reports that; add the tile with the panel's edit (pencil) button.
 - Knowing when the **other** person answers your outgoing call (`call.answered` is for incoming calls).
-- Switching Wi-Fi or Bluetooth on and off directly: `settings wifi` opens the page instead.
 - Force-closing other apps (`close` presses Back).
 - Screen control inside banking and other secure apps.
 - Starting the microphone service at boot on Android 14+: open the app once after a reboot.
