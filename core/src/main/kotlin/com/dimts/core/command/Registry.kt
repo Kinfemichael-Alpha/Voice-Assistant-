@@ -249,7 +249,7 @@ object Commands {
             c("net", Category.SYSTEM, "net|network|network status|connection", "net", "Show the Wi-Fi, mobile data, Bluetooth, airplane and location switches."),
             c("info", Category.SYSTEM, "info|device info|phone info", "info", "Show a summary of this phone: model, Android, memory, storage, battery, volume."),
             c("apps", Category.PHONE, "apps|list apps|installed apps", "apps [filter]", "List the apps you can open by name.", example = "apps google"),
-            c("dial", Category.PHONE, "dial|keypad", "dial <number>", "Open the dialer with a number typed in (does not call).", example = "dial 911"),
+            c("dial", Category.PHONE, "keypad|dialpad|open dialer", "keypad <number>", "Open the dialer with a number typed in (does not call).", example = "keypad 911"),
             c("camera", Category.PHONE, "camera|photo", "camera [photo|video|selfie]", "Open the camera.", example = "camera selfie"),
             c("email", Category.PHONE, "email|mail", "email <address> [subject]", "Start an email.", example = "email me@example.com \"hello\""),
             c("event", Category.PHONE, "event|add event|calendar event", "event <title>", "Create a calendar event (the calendar opens so you can set the time).",

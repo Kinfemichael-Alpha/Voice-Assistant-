@@ -345,7 +345,7 @@ class PhoneHost(private val rt: AppRuntime) : DeviceHost {
     }
 
     private fun dial(number: String): CommandResult {
-        if (number.none { it.isDigit() }) return err("usage: dial <number>")
+        if (number.none { it.isDigit() }) return err("usage: keypad <number>")
         launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))))
         return ok("dialer opened" + backgroundNote())
     }
