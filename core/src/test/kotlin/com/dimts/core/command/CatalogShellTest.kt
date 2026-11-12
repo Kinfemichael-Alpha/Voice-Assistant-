@@ -90,6 +90,44 @@ class CatalogShellTest {
     }
 
     @Test
+    fun smallUtilityCommandsWork() {
+        shell.submit("random 5 5")
+        assertEquals("5", out())
+        logs.clear()
+        shell.submit("coin")
+        assertTrue(out() == "heads" || out() == "tails")
+        logs.clear()
+        shell.submit("dice 6")
+        assertTrue(out().toInt() in 1..6)
+        logs.clear()
+        shell.submit("random 9 1")
+        assertTrue(logs.any { it.first == Level.ERROR })
+        logs.clear()
+        shell.submit("now")
+        assertTrue(out().isNotBlank())
+    }
+
+    @Test
+    fun summariesShowLiveValues() {
+        env.values["battery.level"] = Value.Num(64.0)
+        shell.submit("battery")
+        assertTrue(Regex("battery\\.level\\s+= 64").containsMatchIn(out()))
+        logs.clear()
+        shell.submit("net")
+        assertTrue(out().contains("wifi.enabled"))
+        logs.clear()
+        shell.submit("info")
+        assertTrue(out().contains("device.model"))
+    }
+
+    @Test
+    fun helpPythonExplainsWritingAndActivating() {
+        shell.submit("help python")
+        assertTrue(out().contains("HOW TO WRITE"))
+        assertTrue(out().contains("HOW IT IS ACTIVATED"))
+    }
+
+    @Test
     fun theSpecExampleWorksEndToEnd() {
         env.values["battery.level"] = Value.Num(15.0)
         shell.submit("if battery.level < 20: echo low")

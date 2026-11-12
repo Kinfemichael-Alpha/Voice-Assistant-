@@ -22,6 +22,20 @@ class StatesAndLoopsTest {
     }
 
     @Test
+    fun untilRunsUntilTheConditionBecomesTrue() {
+        val h = Harness()
+        h.run(
+            """
+            set n = 0
+            until n == 3:
+                n += 1
+                say x
+            """,
+        )
+        assertEquals(listOf("say x", "say x", "say x"), h.ran)
+    }
+
+    @Test
     fun whileCanTestAPhoneState() {
         val h = Harness()
         h.env.values["battery.level"] = Value.Num(10.0)

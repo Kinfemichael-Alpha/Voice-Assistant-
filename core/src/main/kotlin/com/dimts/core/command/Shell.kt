@@ -114,7 +114,31 @@ class Shell(
                 if (engine.removeDefinition(name)) CommandResult.ok("$name removed") else CommandResult.error("nothing defined as '$name'")
             }
             "echo" -> CommandResult.ok(a.joinToString(" "))
-            "version" -> CommandResult.ok("Dimts $versionName")
+            "version" -> CommandResult.ok("Ignis $versionName")
+            "now" -> CommandResult.ok(formatTime(clock.nowMillis()))
+            "random" -> {
+                val usage = CommandResult.error("usage: random [min] [max]")
+                val lo: Int
+                val hi: Int
+                when (a.size) {
+                    0 -> { lo = 1; hi = 100 }
+                    1 -> { lo = 1; hi = a[0].toIntOrNull() ?: return usage }
+                    else -> { lo = a[0].toIntOrNull() ?: return usage; hi = a[1].toIntOrNull() ?: return usage }
+                }
+                if (lo > hi) usage else CommandResult.ok((lo..hi).random().toString())
+            }
+            "coin" -> CommandResult.ok(listOf("heads", "tails").random())
+            "dice" -> {
+                val sides = a.firstOrNull()?.toIntOrNull() ?: 6
+                if (sides < 2) CommandResult.error("usage: dice [sides]") else CommandResult.ok((1..sides).random().toString())
+            }
+            "battery" -> CommandResult.ok(summary("battery.level", "battery.charging", "battery.plugged", "battery.temperature", "battery.health", "battery.saver"))
+            "net" -> CommandResult.ok(
+                summary("network.connected", "network.type", "wifi.connected", "wifi.enabled", "mobile.connected", "data.enabled", "airplane.mode", "bluetooth.on", "location.enabled"),
+            )
+            "info" -> CommandResult.ok(
+                summary("device.model", "android.version", "uptime.minutes", "memory.free", "storage.free", "battery.level", "screen.brightness", "volume", "ringer.mode", "dnd.mode"),
+            )
             "rules" -> CommandResult.ok(describeRules())
             "rules.cancel" -> {
                 val id = a.firstOrNull()?.toIntOrNull() ?: return CommandResult.error("usage: cancel rule <id>  (see 'rules')")
@@ -153,6 +177,9 @@ class Shell(
             else -> null
         }
     }
+
+    private fun summary(vararg names: String): String =
+        names.joinToString("\n") { n -> n.padEnd(20) + " = " + (live(n) ?: "-") }
 
     private fun describeDefs(): String {
         val states = engine.derivedStates()

@@ -14,7 +14,7 @@ package com.dimts.core.script
  * `"quoted text"`, `$variable`, and `{expression}` pieces inside words.
  */
 object Parser {
-    private val HEADERS = setOf("if", "elif", "else", "when", "whenever", "at", "every", "after", "repeat", "while", "def")
+    private val HEADERS = setOf("if", "elif", "else", "when", "whenever", "at", "every", "after", "repeat", "while", "until", "def")
     private val KEYWORDS = HEADERS + setOf("pass", "stop", "wait", "set", "break", "continue", "state")
     private val ACTION_NAME = Regex("^[\\p{L}_][\\p{L}\\p{N}_]*$")
     private val ASSIGN = Regex("^([\\p{L}_][\\p{L}\\p{N}_.]*)\\s*=(?!=)\\s*(.+)$")
@@ -287,6 +287,10 @@ object Parser {
                 "while" -> {
                     val cond = ExprParser.parseAll(head)
                     return WhileStmt(line.line, cond, bodyFor(line, inline, "while"))
+                }
+                "until" -> {
+                    val cond = ExprParser.parseAll(head)
+                    return WhileStmt(line.line, Not(cond), bodyFor(line, inline, "until"))
                 }
                 "def" -> {
                     if (!ACTION_NAME.matches(head)) throw ScriptError("'def' needs a name:  def night_mode:", line.line)

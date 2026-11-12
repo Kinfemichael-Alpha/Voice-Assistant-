@@ -47,12 +47,16 @@ object Catalog {
         s("network.connected", "yes/no", "network", "Any internet connection at all."),
         s("network.type", "text", "network", "Type of the active connection.", "wifi, mobile, ethernet, vpn, none"),
         s("airplane.mode", "yes/no", "network", "Airplane mode is on."),
+        s("wifi.enabled", "yes/no", "network", "The Wi-Fi switch is on (even when not connected)."),
+        s("data.enabled", "yes/no", "network", "The mobile data switch is on."),
+        s("location.enabled", "yes/no", "network", "Location (GPS) is switched on."),
         s("bluetooth.on", "yes/no", "network", "Bluetooth is switched on."),
         s("headphones.connected", "yes/no", "network", "Wired or Bluetooth headphones / speaker connected."),
 
         s("screen.awake", "yes/no", "screen", "The screen is on."),
         s("screen.locked", "yes/no", "screen", "The lock screen is showing."),
         s("screen.brightness", "number", "screen", "Screen brightness in percent.", "0 - 100"),
+        s("screen.text", "text", "screen", "All text visible on the screen (needs the accessibility service).", "test with: screen.text contains Install"),
         s("app.current", "text", "screen", "Package name of the app in front (needs the accessibility service).", "test with: app.current contains chrome"),
 
         s("volume", "number", "sound", "Media volume in percent.", "0 - 100"),

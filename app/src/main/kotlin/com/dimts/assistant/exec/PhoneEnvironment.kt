@@ -10,12 +10,16 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.location.LocationManager
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.os.StatFs
 import android.os.SystemClock
 import android.provider.Settings
+import android.telephony.TelephonyManager
+import androidx.core.location.LocationManagerCompat
 import com.dimts.assistant.AppRuntime
 import com.dimts.assistant.access.DimtsAccessibilityService
 import com.dimts.core.command.Catalog
@@ -87,6 +91,9 @@ class PhoneEnvironment(private val rt: AppRuntime) : Environment {
         "mobile.connected" -> safe { Value.Bool(transports().contains(NetworkCapabilities.TRANSPORT_CELLULAR)) }
         "network.connected" -> safe { Value.Bool(hasInternet()) }
         "network.type" -> safe { Value.Str(networkType()) }
+        "wifi.enabled" -> safe { Value.Bool((ctx.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager).isWifiEnabled) }
+        "data.enabled" -> safe { Value.Bool((ctx.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager).isDataEnabled) }
+        "location.enabled" -> safe { Value.Bool(LocationManagerCompat.isLocationEnabled(ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager)) }
         "airplane.mode" -> safe { Value.Bool(Settings.Global.getInt(ctx.contentResolver, Settings.Global.AIRPLANE_MODE_ON, 0) == 1) }
         "bluetooth.on" -> safe { Value.Bool((ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter?.isEnabled == true) }
         "headphones.connected" -> safe { Value.Bool(headphones()) }
@@ -94,6 +101,7 @@ class PhoneEnvironment(private val rt: AppRuntime) : Environment {
         "screen.awake" -> safe { Value.Bool(power().isInteractive) }
         "screen.locked" -> safe { Value.Bool((ctx.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked) }
         "screen.brightness" -> safe { num(Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS) * 100 / 255) }
+        "screen.text" -> Value.Str(DimtsAccessibilityService.instance?.readScreen(80)?.joinToString(" ") ?: "")
         "app.current" -> Value.Str(DimtsAccessibilityService.currentPackage)
 
         "volume" -> safe { num(streamPercent(AudioManager.STREAM_MUSIC)) }

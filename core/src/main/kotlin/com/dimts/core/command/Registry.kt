@@ -81,6 +81,10 @@ class CommandRegistry(val specs: List<CommandSpec>) {
     }
 }
 
+private const val SWITCH_DETAILS =
+    "Android does not let apps flip this directly, so Ignis opens Quick settings and taps the tile (needs the accessibility service). " +
+        "The tile must be in your Quick settings panel; if it is not found, add it with the panel's edit button."
+
 object Commands {
     private fun c(
         id: String,
@@ -134,7 +138,7 @@ object Commands {
             c("vars", Category.RULES, "vars", "vars", "Show variables."),
             c("unset", Category.RULES, "unset", "unset <name>", "Delete a variable."),
             c("names", Category.RULES, "names", "names", "List every name you can use in conditions (battery.level, call.answered ...)."),
-            c("eval", Category.RULES, "eval", "eval <expression>", "Calculate an expression and print it.", example = "eval time between 10 pm and 6 am"),
+            c("eval", Category.RULES, "eval|calc|calculate", "eval <expression>", "Calculate an expression and print it.", example = "eval time between 10 pm and 6 am"),
 
             // ---- states, events & actions ----
             c("states", Category.CATALOG, "states|all current conditions|all current states|all conditions|conditions", "states [filter]",
@@ -158,6 +162,19 @@ object Commands {
             c("sms", Category.PHONE, "sms|text", "sms <contact|number> <text>", "Send a text message.", risky = true, example = "sms mom \"I will be late\""),
             c("open", Category.PHONE, "open|launch", "open <app name>", "Open an app by its name.", example = "open camera",
                 details = "If no app has exactly that name, the closest matches are listed (it also matches by sound: 'cloud' finds 'Claude'). Choose one with:  pick <number>"),
+            c("net.wifi", Category.PHONE, "wifi|wi-fi", "wifi [on|off|toggle]", "Switch Wi-Fi on or off.", example = "wifi off",
+                details = SWITCH_DETAILS),
+            c("net.data", Category.PHONE, "data|mobile data|cellular data", "data [on|off|toggle]", "Switch mobile data on or off.", example = "data on",
+                details = SWITCH_DETAILS),
+            c("net.bluetooth", Category.PHONE, "bluetooth", "bluetooth [on|off|toggle]", "Switch Bluetooth on or off.", example = "bluetooth on",
+                details = SWITCH_DETAILS),
+            c("net.airplane", Category.PHONE, "airplane|airplane mode|flight mode", "airplane [on|off|toggle]", "Switch airplane (flight) mode on or off.",
+                details = SWITCH_DETAILS),
+            c("net.hotspot", Category.PHONE, "hotspot|mobile hotspot", "hotspot [toggle]", "Switch the mobile hotspot (state is not readable, so it always toggles).",
+                details = SWITCH_DETAILS),
+            c("net.location", Category.PHONE, "location", "location [on|off|toggle]", "Switch location (GPS) on or off.", details = SWITCH_DETAILS),
+            c("net.powersave", Category.PHONE, "power saving|battery saver|powersave", "power saving [on|off|toggle]", "Switch power saving mode on or off.",
+                details = SWITCH_DETAILS),
             c("pick", Category.PHONE, "pick|choose|select", "pick [number]", "Choose one of the options just offered (default 1).",
                 example = "pick 2"),
             c("search", Category.PHONE, "search|google", "search <text>", "Search the web in the browser.", example = "search weather in Addis Ababa"),
@@ -223,6 +240,33 @@ object Commands {
                 example = "help call"),
             c("clear", Category.SYSTEM, "clear|cls", "clear", "Clear the console."),
             c("echo", Category.SYSTEM, "echo", "echo <text>", "Print text (no speech)."),
+            c("now", Category.SYSTEM, "now|what time is it|what is the time", "now", "Show the current date and time."),
+            c("random", Category.SYSTEM, "random|rand", "random [min] [max]", "Print a random whole number (default 1-100; one number = 1 to that number).",
+                example = "random 1 10"),
+            c("coin", Category.SYSTEM, "coin|flip a coin|flip coin", "coin", "Flip a coin: heads or tails."),
+            c("dice", Category.SYSTEM, "dice|roll|roll dice|roll a dice", "dice [sides]", "Roll a dice (default 6 sides).", example = "dice 20"),
+            c("battery", Category.SYSTEM, "battery|battery status", "battery", "Show the battery level, charging, plug, temperature, health and saver."),
+            c("net", Category.SYSTEM, "net|network|network status|connection", "net", "Show the Wi-Fi, mobile data, Bluetooth, airplane and location switches."),
+            c("info", Category.SYSTEM, "info|device info|phone info", "info", "Show a summary of this phone: model, Android, memory, storage, battery, volume."),
+            c("apps", Category.PHONE, "apps|list apps|installed apps", "apps [filter]", "List the apps you can open by name.", example = "apps google"),
+            c("dial", Category.PHONE, "dial|keypad", "dial <number>", "Open the dialer with a number typed in (does not call).", example = "dial 911"),
+            c("camera", Category.PHONE, "camera|photo", "camera [photo|video|selfie]", "Open the camera.", example = "camera selfie"),
+            c("email", Category.PHONE, "email|mail", "email <address> [subject]", "Start an email.", example = "email me@example.com \"hello\""),
+            c("event", Category.PHONE, "event|add event|calendar event", "event <title>", "Create a calendar event (the calendar opens so you can set the time).",
+                example = "event dentist"),
+            c("youtube", Category.PHONE, "youtube|play video", "youtube <search>", "Search YouTube.", example = "youtube amharic news"),
+            c("paste", Category.PHONE, "paste|clipboard", "paste", "Print what is on the clipboard."),
+            c("note", Category.PHONE, "note|add note", "note <text>", "Save a note with the time.", example = "note buy bread"),
+            c("notes", Category.PHONE, "notes|show notes", "notes", "List your notes."),
+            c("notes.clear", Category.PHONE, "clear notes", "clear notes", "Delete all notes."),
+            c("export", Category.RULES, "export|export rules", "export", "Copy your states, actions and rules to the clipboard as a script.",
+                details = "Paste it anywhere to keep a backup, or send it to another phone and run it there with 'import'."),
+            c("import", Category.RULES, "import|run clipboard", "import", "Run the script that is on the clipboard (write it on a computer, copy, then import).",
+                details = "The text is run exactly as if you typed it, so multi-line blocks work. See 'help python'."),
+            c("power", Category.SCREEN, "power|power menu", "power [menu|off|restart]", "Open the power menu, or press Power off / Restart in it.",
+                details = "Android has no shutdown permission for apps; Ignis opens the power menu and presses the button through the accessibility service. 'power' alone only opens the menu."),
+            c("panel", Category.SCREEN, "panel|quick settings", "panel", "Open the Quick settings panel."),
+            c("splitscreen", Category.SCREEN, "splitscreen|split screen", "splitscreen", "Toggle split-screen for the current app."),
             c("version", Category.SYSTEM, "version", "version", "Show the app version."),
             c("exit", Category.SYSTEM, "exit|quit", "exit", "Close the console window (rules and listening keep running)."),
         ),

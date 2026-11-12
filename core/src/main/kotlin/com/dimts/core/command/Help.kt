@@ -118,6 +118,7 @@ object Help {
         sb.append("  while battery.level < 80: wait 5 min   loop while a state holds\n")
         sb.append("  def night: volume 10               your own action, run it by name\n")
         sb.append("  state night = time between 10 pm and 6 am   your own state\n")
+        sb.append("  new here? type: help python   (how scripts are written and switched on)\n")
         sb.append("  topics: help script | if | when | while | at | every | after | wait | repeat | set | def | state\n")
         sb.append("          help time | names | examples | voice | keys | permissions | limits\n")
         sb.append("  look up: all current conditions | all possible actions | events | defs\n")
@@ -236,8 +237,32 @@ object Help {
                   volume up
                   wait 1 s
         """,
+        "python" to """
+            Ignis scripts look like Python but run on Ignis's own small engine (there is no Python interpreter
+            on the phone). You do not install or switch anything on: the console already understands it.
+
+            HOW TO WRITE
+              1. Type one line and press Enter:           if battery.level < 20: say "low"
+              2. Or type a block. A line ending in ':' opens it, the next lines are indented
+                 with spaces, and an EMPTY line runs it:
+                     at 10:30 pm:
+                         call mom
+              3. Or write a whole script anywhere (notes app, computer), copy it, then type:  import
+              4. Comments start with #.
+
+            HOW IT IS ACTIVATED
+              - a plain line or block runs immediately, once
+              - at / every / after / when / whenever blocks are RULES: they stay active, are saved,
+                and run by themselves later (type 'rules' to see them, 'cancel rule N' to stop one)
+              - def NAME: saves an action you run by typing NAME;  state NAME = ... saves a state
+              - 'export' copies all your rules, states and actions to the clipboard as a script (backup)
+
+            Keywords: if elif else while until repeat break continue pass stop wait set def state when whenever at every after
+            More: help while | def | state | nesting | examples
+        """,
         "while" to """
             while CONDITION:  ...        repeat the block as long as the condition is true
+            until CONDITION:  ...        repeat the block until the condition becomes true
             break                        leave the loop        continue   jump to the next round
 
               set n = 0

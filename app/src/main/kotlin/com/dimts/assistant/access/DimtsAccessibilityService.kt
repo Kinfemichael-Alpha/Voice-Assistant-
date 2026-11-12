@@ -37,6 +37,19 @@ class DimtsAccessibilityService : AccessibilityService() {
     fun recents() = performGlobalAction(GLOBAL_ACTION_RECENTS)
     fun notifications() = performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
 
+    fun powerMenu() = performGlobalAction(GLOBAL_ACTION_POWER_DIALOG)
+
+    fun splitScreen() = performGlobalAction(GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN)
+
+    fun quickSettings() = performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+
+    fun swipePanel(): Boolean {
+        val w = resources.displayMetrics.widthPixels.toFloat()
+        val h = resources.displayMetrics.heightPixels.toFloat()
+        val path = Path().apply { moveTo(w * 0.8f, h * 0.16f); lineTo(w * 0.2f, h * 0.16f) }
+        return gesture(path, 250)
+    }
+
     fun lockScreen(): Boolean =
         Build.VERSION.SDK_INT >= 28 && performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
 

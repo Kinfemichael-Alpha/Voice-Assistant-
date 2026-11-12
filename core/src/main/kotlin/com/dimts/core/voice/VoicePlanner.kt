@@ -140,6 +140,29 @@ class VoicePlanner(private val registry: CommandRegistry) {
             run("dnd $state", "Do not disturb $state")
         },
         r("vibrate|buzz") { run("vibrate", "Vibrating") },
+        r("what(?:'s| is) the time|what time is it|time now|what(?:'s| is) the date") { run("now", "Time") },
+        r("flip a coin|toss a coin|heads or tails") { run("coin", "Coin") },
+        r("roll (?:a |the )?dice|throw (?:a |the )?dice") { run("dice", "Dice") },
+        r("(?:show |what(?:'s| is) )?(?:the )?battery(?: status| level)?") { run("battery", "Battery") },
+        r("(?:show )?(?:the )?network status|(?:show )?(?:my )?connection") { run("net", "Network") },
+        r("(?:show )?(?:phone|device) info") { run("info", "Phone info") },
+        r("(?:take (?:a )?|open (?:the )?)(photo|picture|selfie|video)") { run("camera ${it.groupValues[1].replace("picture", "photo")}", "Camera") },
+        r("(?:search )?youtube (?:for )?(.+)") { run("youtube ${it.groupValues[1]}", "YouTube") },
+        r("(?:take (?:a )?|add (?:a )?|make (?:a )?)note(?: that| to)? (.+)") { run("note ${it.groupValues[1]}", "Note") },
+        r("(?:show |read )(?:my )?notes") { run("notes", "Notes") },
+        r("(?:open )?(?:the )?(?:quick settings|panel)") { run("panel", "Quick settings") },
+        r("(?:turn |switch )?(on|off)(?: the)? (wi ?fi|bluetooth|mobile data|cellular data|data|airplane mode|flight mode|hotspot|location|power saving|battery saver)|(?:turn |switch )(?:the )?(wi ?fi|bluetooth|mobile data|cellular data|data|airplane mode|flight mode|hotspot|location|power saving|battery saver) (on|off)") {
+            val state = it.groupValues[1].ifEmpty { it.groupValues[4] }
+            val what = it.groupValues[2].ifEmpty { it.groupValues[3] }
+            val word = when (what) {
+                "wi fi", "wifi" -> "wifi"
+                "mobile data", "cellular data", "data" -> "data"
+                "airplane mode", "flight mode" -> "airplane"
+                "power saving", "battery saver" -> "power saving"
+                else -> what
+            }
+            run("$word $state", "$what $state")
+        },
 
         // settings, search, apps
         r("(?:open )?(wi ?fi|bluetooth|display|sound|battery|apps|location|accessibility|airplane) settings") {
