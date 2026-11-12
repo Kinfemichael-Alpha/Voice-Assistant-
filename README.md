@@ -360,7 +360,7 @@ at 6 am: wifi on
 whenever wifi.connected and data.enabled: data off
 
 # Press a button that shows up on the screen
-while not screen.text contains "Install":
+while not (screen.text contains "Install"):
     wait 2 s
 tap Install
 
